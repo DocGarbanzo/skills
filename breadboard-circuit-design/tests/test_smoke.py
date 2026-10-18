@@ -31,7 +31,11 @@ def test_example_layouts_verify(key):
 
 
 def test_svg_renders_to_png(tmp_path):
-    import cairosvg
+    try:
+        import cairosvg
+    except OSError as e:  # raised when the system cairo library cannot be found
+        pytest.fail("cairo library not found: brew install cairo / apt install libcairo2 "
+                    "(macOS Apple Silicon: export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib). " + str(e))
     from bblayout import Layout
     svg = Layout.load(os.path.join(EXAMPLES, "blink_layout.json")).svg()
     out = tmp_path / "blink.png"
