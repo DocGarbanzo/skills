@@ -50,8 +50,8 @@ uv run python -c "import cairosvg; print('cairo OK')"
 ## Setup
 
 ```bash
-git clone https://github.com/DocGarbanzo/skill.git
-cd skill
+git clone https://github.com/DocGarbanzo/skills.git
+cd skills
 uv sync            # creates .venv (Python 3.12) from pyproject.toml + uv.lock
 uv run pytest -q   # 11 smoke tests
 ```
