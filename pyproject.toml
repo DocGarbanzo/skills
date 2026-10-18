@@ -19,4 +19,4 @@ dev = ["pytest>=8.0"]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["breadboard-circuit-design/tests"]
+testpaths = ["breadboarding/tests"]

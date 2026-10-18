@@ -1,9 +1,9 @@
 ---
-name: breadboard-circuit-design
+name: breadboarding
 description: Design, simulate (ngspice), hand-lay-out (bblayout) and publish verified solderless-breadboard circuits, e.g. LED blinkers, faders and 555 timers, with straight wiring and a live viewer.
 ---
 
-# Breadboard circuit design
+# Breadboarding
 
 Goal: the user describes what a circuit should do; you pick a topology, size it by simulation, place it on a breadboard with straight wiring, verify the as-placed board electrically, and publish a page they can build from.
 
@@ -95,7 +95,7 @@ Variant when the bottom row g is needed for a follow-on stage (see `examples/bre
 - Bottom row g from column 8 is then free (`g8→g12`).
 - The same core shifted by +18 (columns 23–28; hole-less 25 = Q1 collector) works on the right half.
 
-**Transistor orientation rule** (put it on the page): parts are E-B-C read left→right with the flat face toward you. Where the build order lists E,B,C left→right, the flat face points toward the bottom edge (toward the viewer); where it lists C,B,E, it points toward the top edge. For a BC547/BC548 (C-B-E), turn every transistor 180°.
+**Transistor orientation rule** (put it on the page): parts are E-B-C read left→right with the flat face toward you. bblayout's `instructions()` always lists pins in E, B, C order regardless of position, so compare columns: E in the lower-numbered column → flat face toward the bottom edge (toward the viewer); C in the lower column → flat face toward the top edge. For a BC547/BC548 (C-B-E), turn every transistor 180°.
 
 ## 4. bblayout API essentials
 

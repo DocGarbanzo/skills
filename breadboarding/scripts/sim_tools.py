@@ -1,4 +1,4 @@
-"""Helpers for the breadboard-circuit-design skill.
+"""Helpers for the breadboarding skill.
 
 - as_built(): export a saved bblayout layout to SPICE, swap in the real models,
   add a 0 V sense source in series with D1 and run ngspice.
