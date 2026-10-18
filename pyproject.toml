@@ -1,0 +1,22 @@
+[project]
+name = "skills"
+version = "0.1.0"
+description = "Claude skills and their runtime tooling (breadboard circuit design, ...)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "bblayout==0.0.1",     # breadboard placement, verification, SVG/SPICE export
+    "numpy>=2.0",          # waveform analysis
+    "cairosvg>=2.7",       # render board SVGs to PNG for visual checks (needs system libcairo)
+    "matplotlib>=3.8",     # debug plots of simulated waveforms
+    "pillow>=10.0",        # combine/resize rendered PNGs
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["breadboard-circuit-design/tests"]

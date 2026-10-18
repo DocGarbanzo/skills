@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# simulation scratch output
+*.dat
+*.cir
+*_ab.*
+*.png
+!docs/*.png

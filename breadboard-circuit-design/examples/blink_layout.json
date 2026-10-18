@@ -1,0 +1,308 @@
+{
+  "board": {
+    "name": "half",
+    "columns": 30,
+    "rails": true,
+    "rail_start": 2,
+    "rail_groups": 5,
+    "rail_group_size": 5,
+    "split_rails": false
+  },
+  "rail_nets": {
+    "T+": "VCC",
+    "B+": "VCC",
+    "T-": "GND",
+    "B-": "GND"
+  },
+  "placements": [
+    {
+      "ref": "R1",
+      "pins": {
+        "1": "T+10",
+        "2": "a10"
+      }
+    },
+    {
+      "ref": "D1",
+      "pins": {
+        "A": "d10",
+        "K": "d7"
+      },
+      "blocked": [
+        "d8",
+        "d9"
+      ]
+    },
+    {
+      "ref": "Q1",
+      "pins": {
+        "E": "c5",
+        "B": "c6",
+        "C": "c7"
+      }
+    },
+    {
+      "ref": "R2",
+      "pins": {
+        "1": "B+8",
+        "2": "j8"
+      }
+    },
+    {
+      "ref": "Q2",
+      "pins": {
+        "C": "h8",
+        "B": "h9",
+        "E": "h10"
+      }
+    },
+    {
+      "ref": "R3",
+      "pins": {
+        "1": "T+6",
+        "2": "a6"
+      }
+    },
+    {
+      "ref": "R4",
+      "pins": {
+        "1": "B+9",
+        "2": "j9"
+      }
+    },
+    {
+      "ref": "C1",
+      "pins": {
+        "+": "g8",
+        "-": "g6"
+      },
+      "blocked": [
+        "g7"
+      ]
+    },
+    {
+      "ref": "C2",
+      "pins": {
+        "+": "a7",
+        "-": "a9"
+      },
+      "blocked": [
+        "a8"
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "from": "a5",
+      "to": "T-5",
+      "net": "GND",
+      "color": "black"
+    },
+    {
+      "from": "e6",
+      "to": "f6",
+      "net": "B1",
+      "color": "yellow"
+    },
+    {
+      "from": "e9",
+      "to": "f9",
+      "net": "B2",
+      "color": "green"
+    },
+    {
+      "from": "j10",
+      "to": "B-10",
+      "net": "GND",
+      "color": "black"
+    },
+    {
+      "from": "T+14",
+      "to": "B+14",
+      "net": "VCC",
+      "color": "red"
+    },
+    {
+      "from": "T-15",
+      "to": "B-15",
+      "net": "GND",
+      "color": "black"
+    }
+  ],
+  "schematic": {
+    "name": "Astable LED blinker",
+    "components": [
+      {
+        "ref": "R1",
+        "kind": "resistor",
+        "pins": {
+          "1": "VCC",
+          "2": "LED_A"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 3.0,
+          "max_span": 8.0,
+          "preferred_span": 4.0
+        },
+        "value": "330"
+      },
+      {
+        "ref": "D1",
+        "kind": "led",
+        "pins": {
+          "A": "LED_A",
+          "K": "C1"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "A",
+            "K"
+          ],
+          "min_span": 1.0,
+          "max_span": 3.0,
+          "preferred_span": 1.0
+        },
+        "value": "red"
+      },
+      {
+        "ref": "Q1",
+        "kind": "transistor",
+        "pins": {
+          "E": "GND",
+          "B": "B1",
+          "C": "C1"
+        },
+        "footprint": {
+          "type": "inline",
+          "pins": [
+            "E",
+            "B",
+            "C"
+          ],
+          "pitch": 1
+        },
+        "part": "NPN"
+      },
+      {
+        "ref": "R2",
+        "kind": "resistor",
+        "pins": {
+          "1": "VCC",
+          "2": "C2"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 3.0,
+          "max_span": 8.0,
+          "preferred_span": 4.0
+        },
+        "value": "1k"
+      },
+      {
+        "ref": "Q2",
+        "kind": "transistor",
+        "pins": {
+          "E": "GND",
+          "B": "B2",
+          "C": "C2"
+        },
+        "footprint": {
+          "type": "inline",
+          "pins": [
+            "E",
+            "B",
+            "C"
+          ],
+          "pitch": 1
+        },
+        "part": "NPN"
+      },
+      {
+        "ref": "R3",
+        "kind": "resistor",
+        "pins": {
+          "1": "VCC",
+          "2": "B1"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 3.0,
+          "max_span": 8.0,
+          "preferred_span": 4.0
+        },
+        "value": "47k"
+      },
+      {
+        "ref": "R4",
+        "kind": "resistor",
+        "pins": {
+          "1": "VCC",
+          "2": "B2"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 3.0,
+          "max_span": 8.0,
+          "preferred_span": 4.0
+        },
+        "value": "47k"
+      },
+      {
+        "ref": "C1",
+        "kind": "electrolytic",
+        "pins": {
+          "+": "C2",
+          "-": "B1"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "+",
+            "-"
+          ],
+          "min_span": 1.0,
+          "max_span": 4.0,
+          "preferred_span": 1.0
+        },
+        "value": "22u"
+      },
+      {
+        "ref": "C2",
+        "kind": "electrolytic",
+        "pins": {
+          "+": "C1",
+          "-": "B2"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "+",
+            "-"
+          ],
+          "min_span": 1.0,
+          "max_span": 4.0,
+          "preferred_span": 1.0
+        },
+        "value": "22u"
+      }
+    ]
+  }
+}

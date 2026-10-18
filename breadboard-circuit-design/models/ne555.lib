@@ -1,0 +1,19 @@
+* Behavioural NE555 (bipolar) -- pins: 1 GND, 2 TRIG, 3 OUT, 4 RESET, 5 CTRL, 6 THR, 7 DIS, 8 VCC
+* divider 3x5k sets CTRL = 2/3 Vcc, lower reference = CTRL/2
+* state node s (1 = output high / charging, 0 = low / discharging) held on a small cap
+.subckt NE555 1 2 3 4 5 6 7 8
+R1 8 5 5k
+R2 5 mid 5k
+R3 mid 1 5k
+* quiescent current ~3 mA at 5 V
+RQ 8 1 2.2k
+* SR latch: set when TRIG < mid, reset when THR > CTRL (reset dominates), RESET pin low forces reset
+BS 1 s I = 30e-3*( (0.5+0.5*tanh((v(mid,1)-v(2,1))/1m))*(1-v(s,1)) - ( (0.5+0.5*tanh((v(6,1)-v(5,1))/1m)) + (0.5+0.5*tanh((0.7-v(4,1))/20m)) )*v(s,1) ) + 10e-3*tanh((v(s,1)-0.5)/0.02) - 0.1*(v(s,1)-1)*u(v(s,1)-1) - 0.1*v(s,1)*u(-v(s,1))
+CS s 1 1u
+RS s 1 1e9
+* output stage: high ~ Vcc-1.7 V, low ~0.1 V, ~10 ohm output resistance
+BO o 1 V = 0.1 + (v(8,1)-1.8)*(0.5+0.5*tanh((v(s,1)-0.5)/1m))
+RO o 3 10
+* discharge transistor: on when latch reset
+BD 7 1 I = v(7,1)/20 * (0.5+0.5*tanh((0.5-v(s,1))/1m))
+.ends NE555
