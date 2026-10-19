@@ -145,13 +145,17 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--rul
 }
 
 /* multi-LED player and second trace colour (added by make_page.py) */
-:root { --led-2: #c77d00; --led-2-fill: rgba(199,125,0,.12); --scope-trace-2: #ffb43a; }
+:root { --led-2: #c77d00; --led-2-fill: rgba(199,125,0,.12); --scope-trace-2: #ffb43a;
+  --led-3: #2b7bb9; --led-3-fill: rgba(43,123,185,.12); --scope-trace-3: #4fb3e8; --scope-trace-4: #7bd36a; }
 .leds { display: flex; gap: 14px; justify-content: center; align-items: end; height: 140px; }
 .leds figure { margin: 0; display: grid; justify-items: center; gap: 12px; }
 .leds figcaption { font: .75rem var(--f-mono); color: var(--muted); margin: 0; }
 .player-body.multi { grid-template-columns: auto 1fr; }
 .chart .trace.t2 { stroke: var(--led-2); }
 .chart .area.t2 { fill: var(--led-2-fill); }
+.chart .trace.t3 { stroke: var(--led-3); }
+.chart .area.t3 { fill: var(--led-3-fill); }
 .key { display: inline-flex; gap: 14px; font: .8rem var(--f-mono); color: var(--muted); }
 .key i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; background: var(--led); }
 .key i.t2 { background: var(--led-2); }
+.key i.t3 { background: var(--led-3); }

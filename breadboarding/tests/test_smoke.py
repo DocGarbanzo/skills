@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -92,3 +92,36 @@ def test_make_page(tmp_path):
                 how="<p>x</p>", footer="x")
     html = build_page(spec)
     assert html.count('class="led"') == 2 and "@media print" in html and "player-data" in html
+
+
+def test_flipflop_finger_stimulus(tmp_path, monkeypatch):
+    """extra_netlist: a 1 MΩ finger on SET then RESET switches the LED on, then off."""
+    from sim_tools import as_built
+    monkeypatch.chdir(tmp_path)
+    finger = """SSET VCC_b2 Q1B_b3 cset 0 FINGER
+SRST VCC_b11 Q2B_b10 crst 0 FINGER
+VCSET cset 0 PWL(0 0 1 0 1.001 1 1.3 1 1.301 0)
+VCRST crst 0 PWL(0 0 3 0 3.001 1 3.3 1 3.301 0)
+.model FINGER SW(vt=0.5 vh=0.1 ron=1Meg roff=1e13)"""
+    t, i = as_built("ff", T="5", step="1m", layout_path=os.path.join(EXAMPLES, "ff_layout.json"), extra_netlist=finger)
+    at = lambda x: float(np.interp(x, t, i)) * 1e3
+    assert at(0.9) < 0.5 and at(2.9) > 3 and at(4.9) < 0.5
+
+
+def test_run_netlist_and_meg_guard(tmp_path, monkeypatch):
+    from sim_tools import SimError, run_netlist
+    monkeypatch.chdir(tmp_path)
+    net = "* RC\nV1 a 0 PWL(0 0 1m 5)\nR1 a b 1Meg\nC1 b 0 1u\n.tran 10m 3 0 10m\n"
+    r = run_netlist(net, ["v(b)"], name="rc")
+    assert abs(float(np.interp(1.0, r["t"], r["v(b)"])) - 5 * (1 - np.exp(-1))) < 0.1
+    with pytest.raises(SimError):
+        run_netlist(net.replace("1Meg", "1M"), ["v(b)"], name="rc2")
+
+
+def test_flash_groups():
+    from sim_tools import flash_groups
+    t = np.linspace(0, 2, 20001)
+    sq = (np.sin(2 * np.pi * 8 * t) > 0.3).astype(float)
+    a = sq * (t % 1 < 0.5); b = sq * (t % 1 >= 0.5)
+    g = flash_groups(t, {"D1": a, "D2": b})
+    assert [n for n, _ in g] == ["D1", "D2", "D1", "D2"] and all(len(f) == 4 for _, f in g)

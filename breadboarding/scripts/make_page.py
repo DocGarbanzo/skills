@@ -85,13 +85,18 @@ def steps_html(instructions):
 
 
 # ---------------------------------------------------------------- charts
-def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated trace", area=True, decimate=1500):
-    """Line chart. series: list of (y_array, css_class) where css_class is '' or 't2' (second colour), 'cu' (copper)."""
+def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated trace", area=True, decimate=1500, ymin=0.0, bands=()):
+    """Line chart. series: list of (y_array, css_class); css_class '' (LED red), 't2', 't3' (2nd/3rd colour), 'cu' (copper).
+    ymin < 0 allows negative values (e.g. base voltages); areas are filled down to y = max(ymin, 0).
+    bands: [(t0, t1, label)] shaded event windows (touches, button presses) drawn behind the traces."""
     W, H, l, r, top, b = 640, 210, 44, 12, 14, 34
     X = lambda x: l + (W - l - r) * x / xmax
-    Y = lambda y: top + (H - top - b) * (1 - min(max(y, 0), ymax) / ymax)
+    Y = lambda y: top + (H - top - b) * (1 - (min(max(y, ymin), ymax) - ymin) / (ymax - ymin))
     t = np.asarray(t)
     g = []
+    for b0, b1, lab in bands:
+        g.append(f'<rect x="{X(b0):.1f}" y="{top}" width="{max(X(b1)-X(b0), 1.5):.1f}" height="{H-top-b}" class="band"/>'
+                 f'<text x="{X(b0)+3:.1f}" y="{top+11}" class="tick">{_html.escape(lab)}</text>')
     for v in yticks:
         g.append(f'<line x1="{l}" x2="{W-r}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" class="grid"/>'
                  f'<text x="{l-8}" y="{Y(v)+4:.1f}" text-anchor="end" class="tick">{v:g}</text>')
@@ -113,7 +118,8 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
             pts.append((tt[min(i + k - 1, len(tt) - 1)], seg.min() if seg.argmin() > seg.argmax() else seg.max()))
         p = " ".join(f"{X(a):.1f},{Y(c):.1f}" for a, c in pts)
         if area and cls != "cu":
-            paths.append(f'<path d="M{X(pts[0][0]):.1f},{Y(0):.1f} L{p.replace(" ", " L")} L{X(pts[-1][0]):.1f},{Y(0):.1f} Z" class="area {cls}"/>')
+            y0 = max(ymin, 0.0)
+            paths.append(f'<path d="M{X(pts[0][0]):.1f},{Y(y0):.1f} L{p.replace(" ", " L")} L{X(pts[-1][0]):.1f},{Y(y0):.1f} Z" class="area {cls}"/>')
         paths.append(f'<polyline points="{p}" class="trace {cls}"/>')
     return (f'<svg viewBox="0 0 {W} {H}" class="chart" role="img" aria-label="{_html.escape(label)}">'
             + "".join(g) + "".join(paths)
@@ -122,14 +128,20 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
 
 
 # ---------------------------------------------------------------- player data
-def player_data(t, currents, t0, t1, dt=1e-3):
-    """Resample LED currents (dict name -> A) on [t0, t1) at dt, quantise to uint8 with a shared full scale."""
+def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True):
+    """Resample LED currents (dict name -> A) on [t0, t1) at dt, quantise to uint8 with a shared full scale.
+    The Hz readout counts onsets of any LED; pass rate_led=k to count only LED k (e.g. a chaser's cycle rate).
+    show_rate=False hides the Hz readout (latches, one-shots)."""
     tg = np.arange(t0, t1, dt)
     ys = {k: np.clip(np.interp(tg, t, np.asarray(v) * 1e3), 0, None) for k, v in currents.items()}
     imax = max(float(np.percentile(y, 99.5)) for y in ys.values())
     leds = [{"name": k, "b64": base64.b64encode(np.round(np.clip(y / imax, 0, 1) * 255).astype(np.uint8).tobytes()).decode()}
             for k, y in ys.items()]
-    return {"dt": dt, "n": len(tg), "imax_mA": round(imax, 2), "leds": leds}
+    out = {"dt": dt, "n": len(tg), "imax_mA": round(imax, 2), "leds": leds}
+    if rate_led is not None:
+        out["rate_led"] = int(rate_led)
+    out["show_rate"] = bool(show_rate)
+    return out
 
 
 # ---------------------------------------------------------------- page
@@ -153,7 +165,8 @@ def build_page(spec):
     board_svg (raw bblayout svg text), board_caption, charts [(title, svg, caption)],
     parts [(refs, value, note)] — value like '330', '2.2k' gets bands; prefix with '=' to print verbatim,
     instructions (Layout.instructions() text), supply_note, how (html), notes [html] (extra notes),
-    has_transistors (bool), footer (html).
+    has_transistors / has_electrolytics (bool; default: detected from instructions), footer (html).
+    Player options live in player_data(): rate_led, show_rate.
     """
     css = open(os.path.join(TEMPLATES, "page.css")).read()
     js = open(os.path.join(TEMPLATES, "player.js")).read()
@@ -170,7 +183,7 @@ def build_page(spec):
       <div class="leds" aria-hidden="true">{leds}</div>
       <div class="scope-wrap"><canvas class="scope" aria-label="Scrolling LED current trace"></canvas></div>
     </div>
-    <div class="readout"><span><b class="rate">–</b> Hz</span><span>{cur}</span><span class="tpos">t = 0.0 s</span></div>
+    <div class="readout">{'<span><b class="rate">–</b> Hz</span>' if pl.get("show_rate", True) else ''}<span>{cur}</span><span class="tpos">t = 0.0 s</span></div>
     <figcaption>{spec.get("player_caption", "Real-time replay of the ngspice LED current; the trace shows the last 4 seconds.")}</figcaption>
   </figure>'''
     charts = "".join(f'<figure class="panel"><h3>{e(t)}</h3>{svg}<figcaption>{cap}</figcaption></figure>' for t, svg, cap in spec["charts"])
@@ -183,7 +196,9 @@ def build_page(spec):
         else:
             v = e(val)
         rows.append(f"<tr><td>{e(refs)}</td><td class=\"n\">{v}</td><td>{note}</td></tr>")
-    notes = ([_TRANSISTOR_NOTE] if spec.get("has_transistors", True) else []) + [_CAP_NOTE] + spec.get("notes", [])
+    has_el = spec.get("has_electrolytics", "electrolytic" in spec["instructions"])
+    notes = ([_TRANSISTOR_NOTE] if spec.get("has_transistors", "inline-3" in spec["instructions"]) else []) \
+        + ([_CAP_NOTE] if has_el else []) + spec.get("notes", [])
     notes_html = "".join(f'<div class="note">{n}</div>' for n in notes)
     data = json.dumps({"main": pl})
     return f'''<title>{e(spec["title"])}</title>
