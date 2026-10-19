@@ -91,7 +91,7 @@ def test_make_page(tmp_path):
                 parts=[("R1", "330", "x"), ("C1", "=22 µF", "x")], instructions=L.instructions(),
                 how="<p>x</p>", footer="x")
     html = build_page(spec)
-    assert html.count('class="led"') == 2 and "@media print" in html and "player-data" in html
+    assert html.count('class="led ') == 2 and "@media print" in html and "player-data" in html
 
 
 def test_flipflop_finger_stimulus(tmp_path, monkeypatch):
@@ -125,3 +125,11 @@ def test_flash_groups():
     a = sq * (t % 1 < 0.5); b = sq * (t % 1 >= 0.5)
     g = flash_groups(t, {"D1": a, "D2": b})
     assert [n for n, _ in g] == ["D1", "D2", "D1", "D2"] and all(len(f) == 4 for _, f in g)
+
+
+def test_blue_led_model(tmp_path, monkeypatch):
+    """Police strobe has a blue LED: as_built must map LED_BLUE to models.inc and both LEDs must flash."""
+    from sim_tools import as_built
+    monkeypatch.chdir(tmp_path)
+    t, I = as_built("police", T="2.5", step="0.5m", layout_path=os.path.join(EXAMPLES, "police_layout.json"))
+    assert I["D1"].max() > 5e-3 and I["D2"].max() > 3e-3

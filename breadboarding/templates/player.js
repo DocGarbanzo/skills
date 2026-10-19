@@ -39,9 +39,11 @@
     for(let s=0;s<=win;s++){ const x=w*s/win; g.beginPath(); g.moveTo(x+.5,top); g.lineTo(x+.5,bot); g.stroke(); }
     for(let k=0;k<=2;k++){ const y=top+H*k/2; g.beginPath(); g.moveTo(0,y+.5); g.lineTo(w,y+.5); g.stroke(); }
     g.fillText(p.imax.toFixed(1)+' mA',4,top+10); g.fillText('−4 s',2,h-5); g.textAlign='right'; g.fillText('now',w-3,h-5); g.textAlign='left';
+    const TRACE={red:'#ff5a4e',blue:'#4f9bff',green:'#4fe07a',yellow:'#ffd84a',white:'#e8eef8'};
+    const named=DATA[p.el.dataset.key].leds.map(l=>l.color&&l.color!=='red'?TRACE[l.color]:null);
     const t0=p.t-win, cols=[css('--scope-trace'), css('--scope-trace-2')||'#ffb43a', css('--scope-trace-3')||'#4fb3e8', css('--scope-trace-4')||'#7bd36a'];
     p.qs.forEach((q,k)=>{
-      g.strokeStyle=cols[k%cols.length]; g.lineWidth=1.6; g.beginPath();
+      g.strokeStyle=named[k]||cols[k%cols.length]; g.lineWidth=1.6; g.beginPath();
       for(let x=0;x<=w;x++){
         const ta=t0+win*x/w, tb=t0+win*(x+1)/w;
         let mn=1,mx=0; for(let t=ta;t<tb;t+=p.dt){ const v=sample(p,k,t); if(v<mn)mn=v; if(v>mx)mx=v; }

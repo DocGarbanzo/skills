@@ -37,3 +37,13 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 24 | Net names equal to part refs (`C1`) confused the build list. | Documented: name nets by function. |
 | 25 | No knowledge on µA touch inputs. | Documented in section 5. |
 | 26 | No parameter-sweep helper (grid search needed unique file names, multiprocessing). | Open: `run_netlist(name=...)` covers unique names; a `sweep()` helper is still to do. |
+
+## 2026-10-19: police strobe in red and blue
+
+| # | Problem | Status |
+|---|---|---|
+| 27 | Only a red LED model; `as_built()` replaced only `LED_RED`. | Fixed: `LEDBLUE` in models.inc (2.75/3.05/3.2 V at 1/10/20 mA); any `LED<COLOUR>` model maps to bblayout's `LED_<COLOUR>`; a missing colour raises. |
+| 28 | A model warning (VJ too large) made ngspice stop the transient early yet exit 0; the analysis silently used 0.08 s of data. | Fixed: `as_built()`/`run_netlist()` raise if the data end before the requested stop time. |
+| 29 | Parallel `as_built()` runs of the same layout shared `<key>_ab.cir/.dat` and overwrote each other (β 120 silently showed the nominal result). | Fixed: unique run files per call. |
+| 30 | `flash_groups()` threshold (half the maximum) was defeated by edge spikes; the blue LED's flashes were missed. | Fixed: threshold from the 99.5th percentile. |
+| 31 | Player and charts had no LED colours (blue LED drawn red/amber). | Fixed: `player_data(colors={"D2": "blue"})`, LED glow classes, chart/key class `blue`. |

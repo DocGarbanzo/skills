@@ -12,6 +12,7 @@ Usage (from the working directory that holds models/ and the *_layout.json):
 import os
 import re
 import subprocess
+import uuid
 
 import numpy as np
 from bblayout import Layout
@@ -20,15 +21,31 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.environ.get("BB_MODELS", os.path.join(HERE, "..", "models"))
 
 def _models(path=None):
-    """Return (npn_model_line, led_model_line) from models.inc, renamed to bblayout's NPN / LED_RED."""
+    """Return (npn_model_line, {bblayout_led_model: line}) from models.inc.
+
+    models.inc names LEDs LED<COLOUR> (LEDRED, LEDBLUE, ...); bblayout's export calls them LED_<COLOUR>.
+    """
     txt = open(path or os.path.join(MODELS, "models.inc")).read()
     npn = re.search(r"^\.model Q2N3904 NPN\((.*)\)\s*$", txt, re.M).group(1)
-    led = re.search(r"^\.model LEDRED D\((.*)\)\s*$", txt, re.M).group(1)
-    return f".model NPN NPN({npn})", f".model LED_RED D({led})"
+    leds = {f"LED_{m.group(1)}": f".model LED_{m.group(1)} D({m.group(2)})"
+            for m in re.finditer(r"^\.model LED([A-Z]+) D\((.*)\)\s*$", txt, re.M)}
+    return f".model NPN NPN({npn})", leds
 
 
 class SimError(RuntimeError):
     pass
+
+
+def _spice_num(x):
+    m = re.fullmatch(r"([0-9.eE+-]+)\s*(meg|[fpnumkg]?)\w*", str(x).strip(), re.I)
+    mult = {"": 1, "f": 1e-15, "p": 1e-12, "n": 1e-9, "u": 1e-6, "m": 1e-3, "k": 1e3, "meg": 1e6, "g": 1e9}
+    return float(m.group(1)) * mult[m.group(2).lower()]
+
+
+def _check_complete(t, T, name):
+    """ngspice can stop a transient early (e.g. a model warning) yet exit 0; refuse truncated data."""
+    if t[-1] < 0.999 * _spice_num(T):
+        raise SimError(f"{name}: transient stopped at t = {t[-1]:.4g} s of {T}; check model warnings in the log")
 
 
 def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600):
@@ -46,30 +63,36 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     s = Layout.load(path).spice(analysis=f".tran {step} {T} 0 {step}", supplies={"VCC": 5})
     s = s.replace('* .include "NE555.lib"', f'.include {os.path.join(MODELS, "ne555.lib")}')
     s = s.replace("DC 5  ; supply", "PWL(0 0 1m 5)  ; supply")
-    refs = leds or re.findall(r"^(D\d+) \S+ \S+ LED_RED", s, re.M)
+    refs = leds or re.findall(r"^(D\d+) \S+ \S+ LED_[A-Z]+", s, re.M)
     if not refs:
-        raise SimError("no LED_RED diodes found in the exported netlist")
+        raise SimError("no LEDs found in the exported netlist")
     for r in refs:
         s, n = re.subn(rf"^{r} {r}_A {r}_K", f"VS_{r} {r}_A {r}_mid 0\n{r} {r}_mid {r}_K", s, flags=re.M)
         if n != 1:
             raise SimError(f"LED {r} not found in netlist")
-    npn, led = _models(models_path)
+    npn, led_models = _models(models_path)
     if beta is not None:
         npn = re.sub(r"Bf=[0-9.eE+-]+", f"Bf={beta}", npn)
-    s = re.sub(r"^\.model LED_RED .*$", led, s, flags=re.M)
+    for name in set(re.findall(r"^\.model (LED_[A-Z]+) ", s, re.M)):
+        if name not in led_models:
+            raise SimError(f"no model {name.replace('_', '')} in models.inc (LED colour not characterised)")
+        s = re.sub(rf"^\.model {name} .*$", led_models[name], s, flags=re.M)
     s = re.sub(r"^\.model NPN .*$", npn, s, flags=re.M)
     s = s.replace(f".tran {step}", f"{extra_netlist}\n.options method=gear\n.tran {step}", 1)
     vecs = [f"i(VS_{r})" for r in refs] + [f"v({n})" for n in extra]
     s = re.sub(r"^\.end\s*$", f".control\nrun\nwrdata {key}_ab.dat {' '.join(vecs)}\n.endc\n.end", s, flags=re.M)
-    with open(f"{key}_ab.cir", "w") as f:
+    run = f"{key}_ab_{os.getpid()}_{uuid.uuid4().hex[:6]}"   # unique: parallel runs must not share files
+    s = s.replace(f"wrdata {key}_ab.dat", f"wrdata {run}.dat")
+    with open(f"{run}.cir", "w") as f:
         f.write(s)
-    if os.path.exists(f"{key}_ab.dat"):
-        os.remove(f"{key}_ab.dat")
-    r = subprocess.run(["ngspice", "-b", f"{key}_ab.cir"], capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(["ngspice", "-b", f"{run}.cir"], capture_output=True, text=True, timeout=timeout)
     log = r.stdout + r.stderr
-    if r.returncode != 0 or not os.path.exists(f"{key}_ab.dat") or re.search(r"timestep too small|singular matrix", log, re.I):
-        raise SimError(f"ngspice failed for {key}_ab.cir:\n" + log[-1500:])
-    d = np.loadtxt(f"{key}_ab.dat")
+    if r.returncode != 0 or not os.path.exists(f"{run}.dat") or re.search(r"timestep too small|singular matrix", log, re.I):
+        raise SimError(f"ngspice failed for {run}.cir:\n" + log[-1500:])
+    d = np.loadtxt(f"{run}.dat")
+    os.replace(f"{run}.cir", f"{key}_ab.cir")          # keep the last netlist for inspection
+    os.remove(f"{run}.dat")
+    _check_complete(d[:, 0], T, f"{key}_ab.cir")
     t = d[:, 0]
     cols = {name: d[:, 2 * k + 1] for k, name in enumerate([r for r in refs] + [f"v({n})" for n in extra])}
     if len(refs) == 1 and not extra:
@@ -98,6 +121,9 @@ def run_netlist(netlist, vectors, name="design", timeout=600):
     if r.returncode != 0 or not os.path.exists(out) or re.search(r"timestep too small|singular matrix", log, re.I):
         raise SimError(f"ngspice failed for {name}.cir:\n" + log[-1500:])
     d = np.loadtxt(out)
+    m = re.search(r"^\.tran\s+\S+\s+(\S+)", text, re.M | re.I)
+    if m:
+        _check_complete(d[:, 0], m.group(1), f"{name}.cir")
     res = {"t": d[:, 0]}
     for k, v in enumerate(vectors):
         res[v] = d[:, 2 * k + 1]          # wrdata writes (t, value) pairs per vector
@@ -152,7 +178,7 @@ def flash_groups(t, currents, t0=0.0, thresh=None, min_len=1e-3):
     events = []
     for name, i in currents.items():
         i = np.asarray(i)
-        th = thresh if thresh is not None else 0.5 * np.max(i[t > t0])
+        th = thresh if thresh is not None else 0.5 * np.percentile(i[t > t0], 99.5)  # robust to edge spikes
         m = t > t0
         tt, ii = t[m], i[m]
         on = False

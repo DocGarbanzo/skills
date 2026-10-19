@@ -11,10 +11,10 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 
 ## Bundled files
 
-- `models/models.inc`: Q2N3904 and LEDRED SPICE models (the single source of truth; `as_built()` reads them from here).
+- `models/models.inc`: Q2N3904, LEDRED and LEDBLUE SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run. `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
-- `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; `rate_led=k`, `show_rate=False`), `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
+- `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`), `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
 - `examples/*_layout.json`: eleven proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
@@ -259,7 +259,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | NE555 blinker | `n555_layout.json` | 1 × 555 | R_A 1k, R_B 68k, C 10 µF, 10 nF pin 5, 100 µF decoupling, LED 150 Ω | 0.96 s, 9.5 mA |
 | Alternating blinker (2 LEDs) | `alt_layout.json` | 4 NPN | fast: R1 330 (shared LED resistor), R2 2.2k, R3 15k, R4 68k, C1 22 µF, C2 47 µF; slow: 2.2k loads, 15k, 2 × 470 µF; LEDs F→S3, F→S4 | 0.99 s blink, 0.51 s on, swap every 5.1 s, 9.4 mA |
 | Three-LED chaser | `chaser_layout.json` | 3 NPN | R_C 470 (LED collector→GND), R_B 22k, C 47 µF ring | 1.00 s cycle, 0.33 s per LED, 6.9 mA |
-| Police strobe | `police_layout.json` | 4 NPN | alternating blinker with C1 = C2 = 3.3 µF, C3 = C4 = 47 µF | 9.3 Hz flashes of 36 ms, locked 4 per burst, swap every 0.51 s |
+| Police strobe (red + blue) | `police_layout.json` | 4 NPN | alternating blinker with C1 = C2 = 3.3 µF, C3 = C4 = 47 µF, R7 = 18k, D2 blue | 9.3 Hz flashes of 36 ms, locked 4 red + 4 blue, 1.13 s cycle; 9.4 / 5.8 mA |
 | Touch flip-flop | `ff_layout.json` | 3 NPN | µA latch: R_C 220k/33k, cross 1 MΩ, 100 nF power-up cap; LED driver 3.3k base, 470 Ω | finger 0.3–3.3 MΩ, β 60–416; 6.6 mA on, 0.15 mA standby |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 

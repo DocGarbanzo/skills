@@ -159,3 +159,15 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--rul
 .key i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; background: var(--led); }
 .key i.t2 { background: var(--led-2); }
 .key i.t3 { background: var(--led-3); }
+
+/* LED colours (player): class on .led set from player_data(colors=...) */
+.led.blue, .led.blue::after { background: #173a6e; }
+.led.blue .glow { background: radial-gradient(circle at 50% 40%, #f2f8ff 0%, #5aa8ff 35%, #1d5fd8 70%); box-shadow: 0 0 28px 10px rgba(60,140,255,.85); }
+.led.green, .led.green::after { background: #1d4a2a; }
+.led.green .glow { background: radial-gradient(circle at 50% 40%, #f2fff4 0%, #5be37d 35%, #1c9c3f 70%); box-shadow: 0 0 28px 10px rgba(70,220,110,.8); }
+.led.yellow, .led.yellow::after { background: #5e4a12; }
+.led.yellow .glow { background: radial-gradient(circle at 50% 40%, #fffbe8 0%, #ffd84a 35%, #e0a800 70%); box-shadow: 0 0 28px 10px rgba(255,205,60,.85); }
+.led.white, .led.white::after { background: #5a5f66; }
+.led.white .glow { background: radial-gradient(circle at 50% 40%, #ffffff 0%, #f1f5ff 40%, #b9c8e6 75%); box-shadow: 0 0 28px 10px rgba(235,242,255,.9); }
+:root { --led-blue: #1d5fd8; --led-blue-fill: rgba(29,95,216,.12); }
+.chart .trace.blue { stroke: var(--led-blue); } .chart .area.blue { fill: var(--led-blue-fill); } .key i.blue { background: var(--led-blue); }

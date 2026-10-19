@@ -500,7 +500,7 @@
           "max_span": 8.0,
           "preferred_span": 4.0
         },
-        "value": "15k"
+        "value": "18k"
       },
       {
         "ref": "R8",
@@ -595,7 +595,7 @@
           "max_span": 3.0,
           "preferred_span": 1.0
         },
-        "value": "red"
+        "value": "blue"
       }
     ]
   }

@@ -86,7 +86,7 @@ def steps_html(instructions):
 
 # ---------------------------------------------------------------- charts
 def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated trace", area=True, decimate=1500, ymin=0.0, bands=()):
-    """Line chart. series: list of (y_array, css_class); css_class '' (LED red), 't2', 't3' (2nd/3rd colour), 'cu' (copper).
+    """Line chart. series: list of (y_array, css_class); css_class '' (LED red), 't2', 't3' (2nd/3rd colour), 'blue', 'cu' (copper).
     ymin < 0 allows negative values (e.g. base voltages); areas are filled down to y = max(ymin, 0).
     bands: [(t0, t1, label)] shaded event windows (touches, button presses) drawn behind the traces."""
     W, H, l, r, top, b = 640, 210, 44, 12, 14, 34
@@ -128,14 +128,16 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
 
 
 # ---------------------------------------------------------------- player data
-def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True):
+def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, colors=None):
     """Resample LED currents (dict name -> A) on [t0, t1) at dt, quantise to uint8 with a shared full scale.
     The Hz readout counts onsets of any LED; pass rate_led=k to count only LED k (e.g. a chaser's cycle rate).
-    show_rate=False hides the Hz readout (latches, one-shots)."""
+    show_rate=False hides the Hz readout (latches, one-shots).
+    colors: {name: "red"|"blue"|"green"|"yellow"|"white"} sets each LED's glow and scope-trace colour (default red)."""
     tg = np.arange(t0, t1, dt)
     ys = {k: np.clip(np.interp(tg, t, np.asarray(v) * 1e3), 0, None) for k, v in currents.items()}
     imax = max(float(np.percentile(y, 99.5)) for y in ys.values())
-    leds = [{"name": k, "b64": base64.b64encode(np.round(np.clip(y / imax, 0, 1) * 255).astype(np.uint8).tobytes()).decode()}
+    leds = [{"name": k, "color": (colors or {}).get(k, "red"),
+             "b64": base64.b64encode(np.round(np.clip(y / imax, 0, 1) * 255).astype(np.uint8).tobytes()).decode()}
             for k, y in ys.items()]
     out = {"dt": dt, "n": len(tg), "imax_mA": round(imax, 2), "leds": leds}
     if rate_led is not None:
@@ -174,7 +176,7 @@ def build_page(spec):
     specs = "".join(f'<div class="spec"><span>{e(a)}</span><b>{e(b)}</b></div>' for a, b in spec["specs"])
     pl = spec["player"]
     multi = len(pl["leds"]) > 1
-    leds = "".join(f'<figure><div class="led"><div class="glow"></div></div><figcaption>{e(d["name"])}</figcaption></figure>'
+    leds = "".join(f'<figure><div class="led {e(d.get("color", "red"))}"><div class="glow"></div></div><figcaption>{e(d["name"])}</figcaption></figure>'
                    for d in pl["leds"])
     cur = " · ".join(f'{e(d["name"])} <b class="cur">0.0</b> mA' for d in pl["leds"])
     player = f'''<figure class="panel player" data-key="main">
