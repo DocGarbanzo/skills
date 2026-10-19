@@ -48,7 +48,7 @@ def _check_complete(t, T, name):
         raise SimError(f"{name}: transient stopped at t = {t[-1]:.4g} s of {T}; check model warnings in the log")
 
 
-def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600):
+def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, parasitic_L="auto"):
     """Simulate the as-placed board (breadboard parasitics included).
 
     Every LED (or only those listed in `leds`, e.g. ["D1","D2"]) gets a 0 V sense source.
@@ -57,6 +57,10 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     Models come from models/models.inc (single source of truth); beta overrides Bf.
     `extra_netlist` is inserted before .tran: stimuli the board cannot show, e.g. a finger as a
     voltage-controlled switch between two hole nodes ("<NET>_<hole>", e.g. VCC_b2 and B1_b3).
+    parasitic_L: True keeps bblayout's nH strip/jumper inductors, False replaces them by 1 uOhm,
+    "auto" (default): False for boards with an NE555, otherwise True with one retry without them when
+    ngspice reports "timestep too small". nH inductors next to the 1 mV-sharp behavioural NE555 switches make
+    the transient stiff (failures, or > 10 min for 8 s at 10 us); at LED time scales they do nothing.
     `timeout` (s) bounds the ngspice run; long runs at fine steps take minutes, so keep T to a few slow cycles.
     """
     path = layout_path or f"{key}_layout.json"
@@ -80,15 +84,27 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     s = re.sub(r"^\.model NPN .*$", npn, s, flags=re.M)
     s = s.replace(f".tran {step}", f"{extra_netlist}\n.options method=gear\n.tran {step}", 1)
     vecs = [f"i(VS_{r})" for r in refs] + [f"v({n})" for n in extra]
-    s = re.sub(r"^\.end\s*$", f".control\nrun\nwrdata {key}_ab.dat {' '.join(vecs)}\n.endc\n.end", s, flags=re.M)
+    # save only the vectors we write: by default ngspice keeps every node (GBs for long fine-step runs)
+    s = re.sub(r"^\.end\s*$", f".save {' '.join(vecs)}\n.control\nrun\nwrdata {key}_ab.dat {' '.join(vecs)}\n.endc\n.end", s, flags=re.M)
+    if parasitic_L == "auto" and re.search(r"^X\S+ .* NE555\b", s, re.M):
+        parasitic_L = False
+    if parasitic_L is False:
+        s = re.sub(r"^L(SEG\d+) (\S+) (\S+) \S+", r"RL\1 \2 \3 1u", s, flags=re.M)
     run = f"{key}_ab_{os.getpid()}_{uuid.uuid4().hex[:6]}"   # unique: parallel runs must not share files
     s = s.replace(f"wrdata {key}_ab.dat", f"wrdata {run}.dat")
     with open(f"{run}.cir", "w") as f:
         f.write(s)
     r = subprocess.run(["ngspice", "-b", f"{run}.cir"], capture_output=True, text=True, timeout=timeout)
     log = r.stdout + r.stderr
-    if r.returncode != 0 or not os.path.exists(f"{run}.dat") or re.search(r"timestep too small|singular matrix", log, re.I):
-        raise SimError(f"ngspice failed for {run}.cir:\n" + log[-1500:])
+    m = re.search(r"Timestep too small[^\n]*", log)
+    if m and parasitic_L == "auto":
+        print(f"as_built({key}): {m.group(0)[:100]} -> retrying without parasitic inductors")
+        for f in (f"{run}.cir", f"{run}.dat"):
+            if os.path.exists(f):
+                os.remove(f)
+        return as_built(key, T, step, layout_path, beta, leds, models_path, extra, extra_netlist, timeout, parasitic_L=False)
+    if r.returncode != 0 or not os.path.exists(f"{run}.dat") or m or re.search(r"singular matrix", log, re.I):
+        raise SimError(f"ngspice failed for {run}.cir: " + (m.group(0) if m else log[-1500:]))
     d = np.loadtxt(f"{run}.dat")
     os.replace(f"{run}.cir", f"{key}_ab.cir")          # keep the last netlist for inspection
     os.remove(f"{run}.dat")

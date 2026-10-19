@@ -98,7 +98,7 @@ uv run python -c "import cairosvg; print('cairo OK')"
 git clone https://github.com/DocGarbanzo/skills.git
 cd skills
 uv sync            # creates .venv (Python 3.12) from pyproject.toml + uv.lock
-uv run pytest -q   # 21 smoke tests
+uv run pytest -q   # 23 smoke tests
 ```
 
 The smoke tests check every prerequisite, so a failure tells you what is missing:
@@ -145,7 +145,7 @@ breadboarding/
   SKILL.md              instructions Claude follows
   models/               SPICE models (Q2N3904, red LED, behavioural NE555)
   scripts/sim_tools.py  as-built simulation + flash detection helpers
-  examples/             eleven verified board layouts (bblayout JSON)
+  examples/             twelve verified board layouts (bblayout JSON)
   scripts/make_page.py  builds the one-page-per-circuit artifact (print-ready)
   scripts/print_check.py  A4 print check of a page (needs the `print` group)
   templates/            page.css + player.js used by make_page.py

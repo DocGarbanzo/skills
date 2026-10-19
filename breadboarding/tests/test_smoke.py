@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))

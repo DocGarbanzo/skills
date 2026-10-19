@@ -128,18 +128,34 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
 
 
 # ---------------------------------------------------------------- player data
-def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, colors=None):
-    """Resample LED currents (dict name -> A) on [t0, t1) at dt, quantise to uint8 with a shared full scale.
+def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, colors=None, smooth_s=0.0):
+    """Bin-average LED currents (dict name -> A) into dt bins on [t0, t1), quantise to uint8 with a shared full scale.
+    Bin averages (not point samples) keep the light energy right for pulses shorter than dt (no aliasing).
+    smooth_s > 0: glow, readout and scope show the moving average over that window (eye integration); use
+    ~0.03 s for carriers above ~30 Hz, which a 60 fps display cannot reproduce. The scope is then scaled to
+    the largest averaged value (scope_max_mA), so the averaged curves use the full height.
     The Hz readout counts onsets of any LED; pass rate_led=k to count only LED k (e.g. a chaser's cycle rate).
     show_rate=False hides the Hz readout (latches, one-shots).
     colors: {name: "red"|"blue"|"green"|"yellow"|"white"} sets each LED's glow and scope-trace colour (default red)."""
-    tg = np.arange(t0, t1, dt)
-    ys = {k: np.clip(np.interp(tg, t, np.asarray(v) * 1e3), 0, None) for k, v in currents.items()}
+    t = np.asarray(t)
+    tg = np.arange(t0, t1 + dt / 2, dt)
+
+    def binavg(v):
+        v = np.asarray(v) * 1e3
+        c = np.concatenate([[0.0], np.cumsum(0.5 * (v[1:] + v[:-1]) * np.diff(t))])
+        return np.diff(np.interp(tg, t, c)) / dt
+
+    ys = {k: np.clip(binavg(v), 0, None) for k, v in currents.items()}
     imax = max(float(np.percentile(y, 99.5)) for y in ys.values())
     leds = [{"name": k, "color": (colors or {}).get(k, "red"),
              "b64": base64.b64encode(np.round(np.clip(y / imax, 0, 1) * 255).astype(np.uint8).tobytes()).decode()}
             for k, y in ys.items()]
-    out = {"dt": dt, "n": len(tg), "imax_mA": round(imax, 2), "leds": leds}
+    out = {"dt": dt, "n": len(tg) - 1, "imax_mA": round(imax, 2), "leds": leds}
+    if smooth_s:
+        k = max(1, int(round(smooth_s / dt)))
+        sm = max(float(np.convolve(y, np.ones(k) / k, mode="valid").max()) for y in ys.values())
+        out["smooth_s"] = float(smooth_s)
+        out["scope_max_mA"] = round(min(sm * 1.1, imax), 2)
     if rate_led is not None:
         out["rate_led"] = int(rate_led)
     out["show_rate"] = bool(show_rate)
@@ -170,7 +186,7 @@ def build_page(spec):
     has_transistors / has_electrolytics (bool; default: detected from instructions), footer (html).
     Player options live in player_data(): rate_led, show_rate.
     """
-    css = open(os.path.join(TEMPLATES, "page.css")).read()
+    css = open(os.path.join(TEMPLATES, "page.css")).read() + "\n" + spec.get("extra_css", "")
     js = open(os.path.join(TEMPLATES, "player.js")).read()
     e = _html.escape
     specs = "".join(f'<div class="spec"><span>{e(a)}</span><b>{e(b)}</b></div>' for a, b in spec["specs"])

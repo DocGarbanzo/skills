@@ -47,3 +47,14 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 29 | Parallel `as_built()` runs of the same layout shared `<key>_ab.cir/.dat` and overwrote each other (β 120 silently showed the nominal result). | Fixed: unique run files per call. |
 | 30 | `flash_groups()` threshold (half the maximum) was defeated by edge spikes; the blue LED's flashes were missed. | Fixed: threshold from the 99.5th percentile. |
 | 31 | Player and charts had no LED colours (blue LED drawn red/amber). | Fixed: `player_data(colors={"D2": "blue"})`, LED glow classes, chart/key class `blue`. |
+
+## 2026-10-19: beat-frequency see-saw (2 × NE555)
+
+| # | Problem | Status |
+|---|---|---|
+| 32 | `as_built()` on NE555 boards crawled or failed ("timestep too small") because of the nH strip inductors next to the sharp 555 model. | Fixed: `parasitic_L="auto"`. |
+| 33 | `as_built()` saved every node vector; parallel 8 s runs were OOM-killed (rc 137). | Fixed: `.save` only written vectors. |
+| 34 | Player point-sampled; a 100 Hz carrier aliased (random glow flicker). | Fixed: bin averages, `smooth_s`, `scope_max_mA`. |
+| 35 | No per-page CSS hook (parts table spilled onto its own page). | Fixed: spec key `extra_css`. |
+| 36 | numpy 2 removed `np.trapz`. | Documented. |
+| 37 | Idea error: an anti-parallel LED pair between two 555 outputs is an XOR, so the LEDs cannot alternate. | Documented with the working see-saw (one NPN). |

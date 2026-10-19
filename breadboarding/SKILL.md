@@ -13,9 +13,9 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 
 - `models/models.inc`: Q2N3904, LEDRED and LEDBLUE SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
-- `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run. `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
-- `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`), `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: eleven proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
+- `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
+- `examples/*_layout.json`: twelve proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -23,7 +23,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (21 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (23 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -43,6 +43,7 @@ Copy `models/` into the working directory, and keep a pristine copy of `models.i
    - Start the supply with `VCC vcc 0 PWL(0 0 1m 5)`. A symmetric astable started at DC can latch.
    - Use `.options method=gear`.
    - Set the max timestep at or below about 1/20 of the fastest edge time: 2 ms produces garbage with ms-scale switching; use 0.1–0.2 ms for anything near 10–20 Hz.
+   - numpy 2 removed `np.trapz`; use `np.trapezoid`.
    - **Write `1Meg`, never `1M`**: SPICE `M` is milli, so `1M` is 1 mΩ (bblayout's export gets this right; hand-written netlists don't). `run_netlist()` refuses `1M`.
    - Write data with `wrdata` and analyse in Python with hysteretic edge detection; drop events shorter than 1–2 ms (sub-ms spikes are model or diffusion-capacitance artefacts, invisible to the eye).
    - Sweep values with a small wrapper and print compact summaries.
@@ -181,6 +182,8 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 - Output high ≈ V_CC − 1.7 V. In sink mode (LED from +5 V into pin 3), that leaves ~0.7 mA of glow, so put a bleed resistor (~1 k) across the LED.
 - Needs 10–100 µF decoupling (and ideally 100 nF at pins 8/1); 10 nF on pin 5 when it isn't driven.
 - Pin-5 control: thresholds become V_c and V_c/2, so t_high = (R_A + R_B)·C·ln((V_CC − V_c/2)/(V_CC − V_c)) while t_low stays fixed. Keep V_c ≥ ~0.6 V (discharge saturation), and drive it from a low impedance.
+- **Beats between two 555s:** a back-to-back LED pair between two equal-duty outputs is an XOR: both LEDs get the same average and breathe together, never in turn. For a see-saw, feed both anodes from OUT1 through one resistor; D1's cathode to OUT2 (OUT1 ∧ ¬OUT2), D2's cathode to an NPN collector whose base is driven from OUT2 via 10k (OUT1 ∧ OUT2). ⟨D1⟩ + ⟨D2⟩ ∝ duty(OUT1) = const.
+- Use carriers ≥ ~100 Hz (20 Hz flickers visibly). Keep R_A ≥ ~4.7k (with 1k the discharge saturation dominates and a trim in R_A acts with the wrong sign); trim in series with R_B (≈ 0.14 % per 100 Ω at R_B = 68k). A beat rests on a ~0.4 % frequency difference, so capacitor tolerance dominates: always give a bench trim procedure.
 - CMOS (TLC555/LMC555): rail-to-rail output, picoamp inputs, small supply spikes, but weak source current (~10 mA).
 
 ## 6. Publishing (artifact page)
@@ -261,6 +264,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Three-LED chaser | `chaser_layout.json` | 3 NPN | R_C 470 (LED collector→GND), R_B 22k, C 47 µF ring | 1.00 s cycle, 0.33 s per LED, 6.9 mA |
 | Police strobe (red + blue) | `police_layout.json` | 4 NPN | alternating blinker with C1 = C2 = 3.3 µF, C3 = C4 = 47 µF, R7 = 18k, D2 blue | 9.3 Hz flashes of 36 ms, locked 4 red + 4 blue, 1.13 s cycle; 9.4 / 5.8 mA |
 | Touch flip-flop | `ff_layout.json` | 3 NPN | µA latch: R_C 220k/33k, cross 1 MΩ, 100 nF power-up cap; LED driver 3.3k base, 470 Ω | finger 0.3–3.3 MΩ, β 60–416; 6.6 mA on, 0.15 mA standby |
+| Beat see-saw | `beat_layout.json` | 2 × 555 + 1 NPN | each 555: R_A 4.7k, R_B 68k, 100 nF, 10 nF pin 5; trim 270 Ω in U1's R_B; LED R 150 Ω from OUT1; D1→OUT2, D2→NPN (base 10k from OUT2) | carriers ≈ 100.3/100.6 Hz, beat 2.7 s; LEDs swing 0–4.1 / 0.2–4.5 mA, sum constant |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.
