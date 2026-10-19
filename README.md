@@ -136,6 +136,7 @@ breadboarding/
   models/               SPICE models (Q2N3904, red LED, behavioural NE555)
   scripts/sim_tools.py  as-built simulation + flash detection helpers
   examples/             seven verified board layouts (bblayout JSON)
+  templates/            reference circuit page (one document per circuit, print-ready)
   tests/                smoke tests (uv run pytest)
 pyproject.toml          Python dependencies (bblayout, numpy, cairosvg, matplotlib, pillow)
 uv.lock                 exact versions

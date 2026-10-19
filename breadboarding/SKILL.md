@@ -47,7 +47,7 @@ Copy `models/` into the working directory, and keep a pristine copy of `models.i
    - **Robustness:** rerun with `Bf=100` or `Bf=120` (or `Bf=60` when claiming wide tolerance), and report the result.
 3. **Hand placement.** Fix every part with `auto_layout(..., fixed={...})`, replace the wire list with your own, rebuild with `Layout.from_dict`, run `verify()`, render to PNG with cairosvg, and look at the image. Iterate until it is clean (section 3). The auto-placer alone gives cramped, crossing layouts.
 4. **As-built check.** Run `scripts/sim_tools.as_built(...)` and compare with the design run. They should agree within a few %.
-5. **Publish** an artifact page (section 6). Add each new circuit as a tab on the same page. Re-verify and re-simulate any board you re-lay-out.
+5. **Publish** one artifact page per circuit (section 6). Re-verify and re-simulate any board you re-lay-out.
 
 ## 3. Layout rules (learned the hard way)
 
@@ -168,17 +168,24 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 
 ## 6. Publishing (artifact page)
 
-One page, one tab per circuit (bare `#anchor` deep links). Per tab:
-- Spec chips.
+**One document per circuit by default.** Each circuit gets its own artifact page (title = circuit name, e.g. "Blinker"). Put several circuits on one tabbed page only when the user asks for a combined document. When a circuit is revised, republish its own page (same file path keeps the URL). Page contents, top to bottom:
+- Eyebrow (board · supply · part count), title, spec chips, one-paragraph description.
 - **Live player:** LED current resampled at 1 ms, quantised to uint8, base64-embedded. Loop over an integer number of periods, or one slow cycle from rate-minimum to rate-minimum. The LED glow opacity is (I/I_max)^0.6, with a scrolling 4 s scope on canvas and a rate readout from hysteretic onsets. It autoplays unless reduced motion is set.
 - The bblayout board SVG (strip the title text, set `viewBox`, put it in an `overflow-x:auto` container with min-width ~560 px).
 - Charts from the simulation data: LED current, internal node voltages, or rate vs time.
 - A parts table with resistor colour bands.
 - Build steps parsed from `instructions()`; handle `pin 1 (GND)` labels and the "notch facing left/right" text.
 - "How it works" with formulas, and design notes covering what was ruled out and why.
-- A shared "Before you power up" section: orientation rule, electrolytic polarity, troubleshooting.
+- "Before you power up": orientation rule (only if the circuit has transistors), electrolytic polarity, troubleshooting.
 
-State that the simulation is ngspice with which models, and give the as-built agreement. Keep the page generator script and template so tabs can be added and regenerated.
+**Print layout (required).** The page must print to A4 without splitting the board. Use `@page { size:A4; margin:14mm 13mm 16mm }` and an `@media print` block that:
+- forces light colours and `print-color-adjust:exact`; hides the player and any tabs;
+- removes `overflow`/`min-width` from the board container and sets the SVG to `width:100%`;
+- sets `break-inside:avoid` on the board, figures, charts, tables, the parts block, the "How it works" block and each build step; `break-after:avoid` on headings;
+- starts the build order on a new page and sets it in two columns (`ol.steps { display:block; columns:2 }`; a grid container ignores `columns`).
+`templates/example_page_blinker.html` is a complete reference page (styles, print CSS, player script); copy its structure. Result: page 1 = board, chart, parts; page 2+ = build order, how it works, notes (~4 pages per circuit). Check it by printing with headless Chromium (Playwright `page.pdf(format="A4", prefer_css_page_size=True)` after `emulate_media(media="print")`), rasterise with `pdftoppm`, and look at every page.
+
+State that the simulation is ngspice with which models, and give the as-built agreement. Keep the page generator script and template so pages can be regenerated.
 
 ## 7. Using the examples
 
