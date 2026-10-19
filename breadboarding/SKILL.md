@@ -11,10 +11,11 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 
 ## Bundled files
 
-- `models/models.inc`: Q2N3904 and LEDRED SPICE models.
+- `models/models.inc`: Q2N3904 and LEDRED SPICE models (the single source of truth; `as_built()` reads them from here).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
-- `scripts/sim_tools.py`: `as_built(key, T, step, beta=None)` exports a saved layout to SPICE, swaps in the real models, adds an LED sense source and runs ngspice; `edges()` and `flashes()` do hysteretic onset detection with glitch filtering.
-- `examples/*_layout.json`: seven proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `edges()` and `flashes()` do hysteretic onset detection with glitch filtering.
+- `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()`, `player_data()` (any number of LEDs), `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
+- `examples/*_layout.json`: eight proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -22,10 +23,10 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (11 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (15 should pass)
 ```
 
-Then run all Python with `uv run python ...`. Without the repo (e.g. in a cloud sandbox):
+Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
 
 ```bash
 pip install --break-system-packages -q bblayout cairosvg matplotlib pillow
@@ -111,7 +112,7 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 ```
 
 - Fixed spec: a `{pin: hole}` dict (resistor pins "1"/"2", electrolytic "+"/"-", LED "A"/"K", transistor "E"/"B"/"C" in any order); a hole string is accepted for transistors and DIPs.
-- Name the LED `D1`: `as_built()` puts its sense source in series with `D1`.
+- Name LEDs `D1`, `D2`, …: `as_built()` puts a sense source in series with each.
 - The verifier checks shorts, open nets, hole conflicts, covered holes, footprints and rail mismatches. Always run it after editing wires.
 - Gotchas: `print(...)` piped to `head` can raise BrokenPipe before `save()`, so redirect instead; use `if __name__=="__main__"` guards on modules you reuse.
 - bblayout's own generic models (BF=200, LED RS=5) can fail with "timestep too small", so always use `as_built()` with the bundled models and Gear integration.
@@ -132,6 +133,11 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 - Saturation needs R_B ≲ β·R_C.
 - The cut-off base swings to about −(V_CC − V_sat) ≈ −4.2 V, within the 6 V V_EBO.
 - The collector recharge R_C·C must be much shorter than the half period.
+
+**Steering LEDs with collector wiring (no extra gates):**
+- An LED from a pulled-up collector F (anode) to another transistor's collector S (cathode) lights only when F's transistor is off AND S's transistor is on. With two complementary collectors S3/S4 of a second astable, two LEDs share one resistor and take turns (see `alt_layout.json`).
+- Put the LEDs' anodes on the *fast* oscillator's collector and the cathodes on the *slow* one: the slow collectors then only sink current while already low, so the slow timing is undisturbed. The fast collector is clamped at V_LED + V_sat ≈ 1.9 V; that consistently shrinks the step that collector couples: t = R·C·ln((V_CC − V_BE + ΔV)/(V_CC − V_BE)), ln(6.15/4.35) = 0.35 instead of 0.75. For 50 % duty make that side's R·C ≈ 2.2× the other.
+- The idle LED is reverse-biased by up to ≈ V_CC − V_sat ≈ 4.8 V; fine for a 5 V supply (typical LED V_R,max = 5 V), not for higher supplies.
 
 **Fades:**
 - An LED clamps an RC node: its brightness range spans only n·V_T·ln(I_max/I_min) ≈ 0.2–0.4 V, so a direct RC fade looks like a blink.
@@ -168,7 +174,9 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 
 ## 6. Publishing (artifact page)
 
-**One document per circuit by default.** Each circuit gets its own artifact page (title = circuit name, e.g. "Blinker"). Put several circuits on one tabbed page only when the user asks for a combined document. When a circuit is revised, republish its own page (same file path keeps the URL). Page contents, top to bottom:
+**One document per circuit by default.** Each circuit gets its own artifact page (title = circuit name, e.g. "Blinker"). Put several circuits on one tabbed page only when the user asks for a combined document. When a circuit is revised, republish its own page (same file path keeps the URL).
+
+Build the page with `scripts/make_page.py` (`build_page(spec)`; the docstring lists the spec keys). It already implements everything below, including the print layout. Page contents, top to bottom:
 - Eyebrow (board · supply · part count), title, spec chips, one-paragraph description.
 - **Live player:** LED current resampled at 1 ms, quantised to uint8, base64-embedded. Loop over an integer number of periods, or one slow cycle from rate-minimum to rate-minimum. The LED glow opacity is (I/I_max)^0.6, with a scrolling 4 s scope on canvas and a rate readout from hysteretic onsets. It autoplays unless reduced motion is set.
 - The bblayout board SVG (strip the title text, set `viewBox`, put it in an `overflow-x:auto` container with min-width ~560 px).
@@ -178,14 +186,9 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 - "How it works" with formulas, and design notes covering what was ruled out and why.
 - "Before you power up": orientation rule (only if the circuit has transistors), electrolytic polarity, troubleshooting.
 
-**Print layout (required).** The page must print to A4 without splitting the board. Use `@page { size:A4; margin:14mm 13mm 16mm }` and an `@media print` block that:
-- forces light colours and `print-color-adjust:exact`; hides the player and any tabs;
-- removes `overflow`/`min-width` from the board container and sets the SVG to `width:100%`;
-- sets `break-inside:avoid` on the board, figures, charts, tables, the parts block, the "How it works" block and each build step; `break-after:avoid` on headings;
-- starts the build order on a new page and sets it in two columns (`ol.steps { display:block; columns:2 }`; a grid container ignores `columns`).
-`templates/example_page_blinker.html` is a complete reference page (styles, print CSS, player script); copy its structure. Result: page 1 = board, chart, parts; page 2+ = build order, how it works, notes (~4 pages per circuit). Check it by printing with headless Chromium (Playwright `page.pdf(format="A4", prefer_css_page_size=True)` after `emulate_media(media="print")`), rasterise with `pdftoppm`, and look at every page.
+**Print layout (required).** The page must print to A4 without splitting the board; `templates/page.css` does this (page 1 = board, chart, parts; then build order in two columns, how it works, notes; ~4 pages). Pitfalls already fixed there: a `display:grid` block with `break-inside:avoid` cannot fragment, and `break-before:avoid` on the footer can push a whole section to a new page. If the last page holds only the footer, shorten the text. Always check with `uv run --project <repo> --group print python scripts/print_check.py page.html` (headless Chromium, A4, `pdftoppm` PNGs; set `CHROMIUM_PATH` to use an existing Chromium, otherwise run `playwright install chromium` once), then look at every page and the page count.
 
-State that the simulation is ngspice with which models, and give the as-built agreement. Keep the page generator script and template so pages can be regenerated.
+State that the simulation is ngspice with which models, and give the as-built agreement. Keep the page script (the spec) next to the layout so the page can be regenerated.
 
 ## 7. Using the examples
 
@@ -196,6 +199,21 @@ from bblayout import Layout
 L = Layout.load("<skill>/examples/blink_layout.json")
 print(L.instructions()); open("blink.svg","w").write(L.svg())
 t, i = as_built("blink", T="14", step="2m", layout_path="<skill>/examples/blink_layout.json")
+t, I = as_built("alt", T="30", step="1m", layout_path="<skill>/examples/alt_layout.json", extra=["S3_c25"])  # I["D1"], I["D2"], I["v(S3_c25)"]
+```
+
+Page skeleton (see the `build_page` docstring for all keys):
+
+```python
+from make_page import build_page, chart_svg, player_data
+spec = dict(title="Alternating blinker", eyebrow="Half breadboard · 5 V · 4 transistors",
+    lede="...", specs=[("Blink", "0.99 s")],
+    player=player_data(t, {"D1": I["D1"], "D2": I["D2"]}, t0, t0 + T_loop),
+    board_svg=open("alt.svg").read(), board_caption="...",
+    charts=[("Simulated LED currents", chart_svg(t, [(I["D1"]*1e3, ""), (I["D2"]*1e3, "t2")], 12, (0, 5, 10), 24, 2), "caption")],
+    parts=[("R1", "330", "note"), ("C1", "=22 µF", "note")], instructions=L.instructions(),
+    how="<p>...</p>", notes=["<b>If it doesn't work.</b> ..."], footer="...")
+open("page.html", "w").write(build_page(spec))
 ```
 
 ## 8. NE555 model notes
@@ -209,6 +227,10 @@ ngspice has no 555, so `models/ne555.lib` is behavioural:
 
 An earlier, softer version stalled in half-switched states when thresholds moved slowly (pin 5 driven) or timing resistors were large (≥ 100 k). Keep the sharp, bistable form. B-source sign: `B n+ n- I=expr` drives current from n+ through the source into n−. The model omits propagation delays and the real supply-current spikes, so decoupling capacitors have no effect in simulation.
 
+## 8b. LED model note
+
+`LEDRED` uses `Tt=50n`. The value `4.32u` found in common LED models is unrealistic for red LEDs; its reverse-recovery charge (Tt·I ≈ 40 nC) was dumped into timing nodes at every fast edge and made a slow astable's timing erratic and dependent on the timestep. If a result changes with the timestep, suspect stored-charge effects first.
+
 ## 9. Proven circuit library (5 V, half board; layouts in `examples/`)
 
 | Circuit | Layout file | Actives | Key values | Result |
@@ -219,6 +241,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Phase-shift pulser | `ps_layout.json` | 4 NPN | ladder 3 × 47k/10 µF, R_C 2.2k, bias 330k, follower pull-downs 220k/100k, LED via follower 120 Ω | 0.85 Hz, robust β 60–416 |
 | Reservoir heartbeat | `res_layout.json` | 3 NPN | astable 4.7k/1k, 68k/22k, 22 µF/10 µF; follower charger R 10 Ω into 1000 µF; LED 150 Ω | 1.24 s beat, 14.6 → 0.1 mA |
 | NE555 blinker | `n555_layout.json` | 1 × 555 | R_A 1k, R_B 68k, C 10 µF, 10 nF pin 5, 100 µF decoupling, LED 150 Ω | 0.96 s, 9.5 mA |
+| Alternating blinker (2 LEDs) | `alt_layout.json` | 4 NPN | fast: R1 330 (shared LED resistor), R2 2.2k, R3 15k, R4 68k, C1 22 µF, C2 47 µF; slow: 2.2k loads, 15k, 2 × 470 µF; LEDs F→S3, F→S4 | 0.99 s blink, 0.51 s on, swap every 5.1 s, 9.4 mA |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

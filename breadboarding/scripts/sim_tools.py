@@ -1,7 +1,7 @@
 """Helpers for the breadboarding skill.
 
 - as_built(): export a saved bblayout layout to SPICE, swap in the real models,
-  add a 0 V sense source in series with D1 and run ngspice.
+  add a 0 V sense source in series with every LED and run ngspice (errors raise SimError).
 - edges() / flashes(): hysteretic LED-onset detection with glitch filtering.
 
 Usage (from the working directory that holds models/ and the *_layout.json):
@@ -19,29 +19,59 @@ from bblayout import Layout
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, "..", "models")
 
-NPN = (".model NPN NPN(Is=6.734f Xti=3 Eg=1.11 Vaf=74.03 Bf=416.4 Ne=1.259 Ise=6.734f "
-       "Ikf=66.78m Xtb=1.5 Br=.7371 Nc=2 Rc=1 Cjc=3.638p Mjc=.3085 Vjc=.75 Fc=.5 Cje=4.493p "
-       "Mje=.2593 Vje=.75 Tr=239.5n Tf=301.2p Itf=.4 Vtf=4 Xtf=2 Rb=10)")
-LED = ".model LED_RED D(Is=93.2p Rs=42m N=3.73 Cjo=2.97p Vj=.75 M=.333 Tt=4.32u)"
+def _models(path=None):
+    """Return (npn_model_line, led_model_line) from models.inc, renamed to bblayout's NPN / LED_RED."""
+    txt = open(path or os.path.join(MODELS, "models.inc")).read()
+    npn = re.search(r"^\.model Q2N3904 NPN\((.*)\)\s*$", txt, re.M).group(1)
+    led = re.search(r"^\.model LEDRED D\((.*)\)\s*$", txt, re.M).group(1)
+    return f".model NPN NPN({npn})", f".model LED_RED D({led})"
 
 
-def as_built(key, T, step, layout_path=None, beta=None):
-    """Simulate the as-placed board (breadboard parasitics included). Returns (t, I_LED)."""
+class SimError(RuntimeError):
+    pass
+
+
+def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=()):
+    """Simulate the as-placed board (breadboard parasitics included).
+
+    Every LED (or only those listed in `leds`, e.g. ["D1","D2"]) gets a 0 V sense source.
+    Returns (t, I) for a single LED, or (t, {ref: I}) when several LEDs are sensed.
+    `extra` adds node voltages to the output, e.g. ["F_a17"], returned in the dict as "v(name)".
+    Models come from models/models.inc (single source of truth); beta overrides Bf.
+    """
     path = layout_path or f"{key}_layout.json"
     s = Layout.load(path).spice(analysis=f".tran {step} {T} 0 {step}", supplies={"VCC": 5})
     s = s.replace('* .include "NE555.lib"', f'.include {os.path.join(MODELS, "ne555.lib")}')
     s = s.replace("DC 5  ; supply", "PWL(0 0 1m 5)  ; supply")
-    s = re.sub(r"^D1 D1_A D1_K", "VSENSE D1_A dmid 0\nD1 dmid D1_K", s, flags=re.M)
-    npn = NPN if beta is None else NPN.replace("Bf=416.4", f"Bf={beta}")
-    s = re.sub(r"^\.model LED_RED .*$", LED, s, flags=re.M)
+    refs = leds or re.findall(r"^(D\d+) \S+ \S+ LED_RED", s, re.M)
+    if not refs:
+        raise SimError("no LED_RED diodes found in the exported netlist")
+    for r in refs:
+        s, n = re.subn(rf"^{r} {r}_A {r}_K", f"VS_{r} {r}_A {r}_mid 0\n{r} {r}_mid {r}_K", s, flags=re.M)
+        if n != 1:
+            raise SimError(f"LED {r} not found in netlist")
+    npn, led = _models(models_path)
+    if beta is not None:
+        npn = re.sub(r"Bf=[0-9.eE+-]+", f"Bf={beta}", npn)
+    s = re.sub(r"^\.model LED_RED .*$", led, s, flags=re.M)
     s = re.sub(r"^\.model NPN .*$", npn, s, flags=re.M)
     s = s.replace(f".tran {step}", f".options method=gear\n.tran {step}", 1)
-    s = re.sub(r"^\.end\s*$", f".control\nrun\nwrdata {key}_ab.dat i(VSENSE)\n.endc\n.end", s, flags=re.M)
+    vecs = [f"i(VS_{r})" for r in refs] + [f"v({n})" for n in extra]
+    s = re.sub(r"^\.end\s*$", f".control\nrun\nwrdata {key}_ab.dat {' '.join(vecs)}\n.endc\n.end", s, flags=re.M)
     with open(f"{key}_ab.cir", "w") as f:
         f.write(s)
-    subprocess.run(["ngspice", "-b", f"{key}_ab.cir"], capture_output=True)
+    if os.path.exists(f"{key}_ab.dat"):
+        os.remove(f"{key}_ab.dat")
+    r = subprocess.run(["ngspice", "-b", f"{key}_ab.cir"], capture_output=True, text=True)
+    log = r.stdout + r.stderr
+    if r.returncode != 0 or not os.path.exists(f"{key}_ab.dat") or re.search(r"timestep too small|singular matrix", log, re.I):
+        raise SimError(f"ngspice failed for {key}_ab.cir:\n" + log[-1500:])
     d = np.loadtxt(f"{key}_ab.dat")
-    return d[:, 0], d[:, 1]
+    t = d[:, 0]
+    cols = {name: d[:, 2 * k + 1] for k, name in enumerate([r for r in refs] + [f"v({n})" for n in extra])}
+    if len(refs) == 1 and not extra:
+        return t, cols[refs[0]]
+    return t, cols
 
 
 def edges(t, i, hi, lo):

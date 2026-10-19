@@ -98,7 +98,7 @@ uv run python -c "import cairosvg; print('cairo OK')"
 git clone https://github.com/DocGarbanzo/skills.git
 cd skills
 uv sync            # creates .venv (Python 3.12) from pyproject.toml + uv.lock
-uv run pytest -q   # 11 smoke tests
+uv run pytest -q   # 15 smoke tests
 ```
 
 The smoke tests check every prerequisite, so a failure tells you what is missing:
@@ -109,6 +109,16 @@ The smoke tests check every prerequisite, so a failure tells you what is missing
 | `test_svg_renders_to_png` | the cairo library is missing (see the macOS note above) |
 | `test_example_layouts_verify` | the Python environment is broken; rerun `uv sync` |
 | `test_as_built_period` | ngspice runs but gives wrong results; report it |
+
+## Optional: print check
+
+To check how an artifact page prints (A4, page breaks), install the `print` group and a Chromium once:
+
+```bash
+uv sync --group print
+uv run --group print playwright install chromium
+uv run --group print python breadboarding/scripts/print_check.py page.html
+```
 
 ## Running things
 
@@ -135,8 +145,10 @@ breadboarding/
   SKILL.md              instructions Claude follows
   models/               SPICE models (Q2N3904, red LED, behavioural NE555)
   scripts/sim_tools.py  as-built simulation + flash detection helpers
-  examples/             seven verified board layouts (bblayout JSON)
-  templates/            reference circuit page (one document per circuit, print-ready)
+  examples/             eight verified board layouts (bblayout JSON)
+  scripts/make_page.py  builds the one-page-per-circuit artifact (print-ready)
+  scripts/print_check.py  A4 print check of a page (needs the `print` group)
+  templates/            page.css + player.js used by make_page.py
   tests/                smoke tests (uv run pytest)
 pyproject.toml          Python dependencies (bblayout, numpy, cairosvg, matplotlib, pillow)
 uv.lock                 exact versions
