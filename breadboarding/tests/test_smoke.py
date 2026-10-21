@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -133,3 +133,20 @@ def test_blue_led_model(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     t, I = as_built("police", T="2.5", step="0.5m", layout_path=os.path.join(EXAMPLES, "police_layout.json"))
     assert I["D1"].max() > 5e-3 and I["D2"].max() > 3e-3
+
+
+def test_mini_board_supply(tmp_path, monkeypatch):
+    """Mini board (no rails): build list names both supply holes, the drawing marks them, and it blinks."""
+    from bblayout import Layout
+    from board_tools import fix_instructions, mark_supply, supply_points
+    from sim_tools import as_built, flashes
+    L = Layout.load(os.path.join(EXAMPLES, "mini_blink_layout.json"))
+    p = supply_points(L)
+    assert set(p) == {"VCC", "GND"}
+    text = fix_instructions(L.instructions(), L)
+    assert f"VCC -> {p['VCC']}" in text and f"GND -> {p['GND']}" in text
+    assert mark_supply(L.svg(), L).count('class="supply-mark"') == 2
+    monkeypatch.chdir(tmp_path)
+    t, i = as_built("mini_blink", T="10", step="2m", layout_path=os.path.join(EXAMPLES, "mini_blink_layout.json"))
+    s, _ = flashes(t, i, t0=3)
+    assert abs(float(np.diff(s).mean()) - 1.30) / 1.30 < 0.05

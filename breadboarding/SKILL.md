@@ -1,21 +1,22 @@
 ---
 name: breadboarding
-description: Design, simulate (ngspice), hand-lay-out (bblayout) and publish verified solderless-breadboard circuits, e.g. LED blinkers, faders and 555 timers, with straight wiring and a live viewer.
+description: Design, simulate (ngspice), hand-lay-out (bblayout) and publish verified solderless-breadboard circuits (half 400-point and mini 170-point boards), e.g. LED blinkers, faders and 555 timers, with straight wiring and a live viewer.
 ---
 
 # Breadboarding
 
 Goal: the user describes what a circuit should do; you pick a topology, size it by simulation, place it on a breadboard with straight wiring, verify the as-placed board electrically, and publish a page they can build from.
 
-User context (adjust if told otherwise): half breadboard (400 points, 30 columns), 5 V supply, hobby-kit parts (E12 resistors, electrolytics up to ~1000 µF, small ceramics, inductors up to 680 µH, NPN kit transistors such as 2N2222A/2N3904/S8050 in E-B-C order, red LEDs, NE555 timers). No PNPs or diodes unless the user says so. Prefer the fewest transistors, but robustness comes first. The user is a physicist: give formulas and reasoning, keep prose short.
+User context (adjust if told otherwise): half breadboard (400 points, 30 columns) by default; the user also has 170-point mini boards (17 columns, no rails; see section 3b), 5 V supply, hobby-kit parts (E12 resistors, electrolytics up to ~1000 µF, small ceramics, inductors up to 680 µH, NPN kit transistors such as 2N2222A/2N3904/S8050 in E-B-C order, red LEDs, NE555 timers). No PNPs or diodes unless the user says so. Prefer the fewest transistors, but robustness comes first. The user is a physicist: give formulas and reasoning, keep prose short.
 
 ## Bundled files
 
 - `models/models.inc`: Q2N3904, LEDRED and LEDBLUE SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
+- `scripts/board_tools.py`: `supply_points()`, `supply_note()`, `fix_instructions()`, `mark_supply()` — supply-lead handling for boards without rails.
 - `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: twelve proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `examples/*_layout.json`: thirteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -23,7 +24,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (23 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (25 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -101,6 +102,15 @@ Variant when the bottom row g is needed for a follow-on stage (see `examples/bre
 - The same core shifted by +18 (columns 23–28; hole-less 25 = Q1 collector) works on the right half.
 
 **Transistor orientation rule** (put it on the page): parts are E-B-C read left→right with the flat face toward you. bblayout's `instructions()` always lists pins in E, B, C order regardless of position, so compare columns: E in the lower-numbered column → flat face toward the bottom edge (toward the viewer); C in the lower column → flat face toward the top edge. For a BC547/BC548 (C-B-E), turn every transistor 180°.
+
+## 3b. Mini board (170 points, `"mini"` template)
+
+- 17 columns × rows a–j, **no power rails**: VCC and GND are ordinary 5-hole column strips. Pass no `rail_nets` to `auto_layout(sch, "mini", fixed=...)`.
+- Budget the strips: a supply strip holds the supply lead plus at most four leads/wire ends. Bridge a net across the channel with a short `e→f` jumper when it is needed in both halves.
+- Proven pattern (`examples/mini_blink_layout.json`, the 2-NPN blinker, columns 2–10): both transistors in row c (Q1 E-B-C c2–c4, Q2 C-B-E c6–c8 with a free column between the bodies), the coupling caps flat in row a and row g, one ground wire along row d joining the emitters, every node that needs a resistor dropped through the channel (e→f), and the resistors lying flat in rows g–j from a +5 V strip (column 10, fed by `e10→f10`). Resistor spans 3–8 limit how far the +5 V strip can be from the furthest node.
+- bblayout's `instructions()` picks the supply hole from the first strip of a net and **silently omits VCC** when that strip is full, while its SPICE export picks another free hole. Use `board_tools.fix_instructions()` (or pass `layout=` to `build_page`, which does it) so the build list and the drawing name the same holes as the simulation.
+- Mark the supply-lead holes on the drawing (`mark_supply()`; automatic with `build_page(layout=...)`): with no rails, a lead one column off powers nothing. The page caption should say so.
+- `as_built()` works unchanged; the 2-NPN blinker gives 1.30 s on the mini board vs 1.33 s on the half board.
 
 ## 4. bblayout API essentials
 
@@ -190,7 +200,7 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 
 **One document per circuit by default.** Each circuit gets its own artifact page (title = circuit name, e.g. "Blinker"). Put several circuits on one tabbed page only when the user asks for a combined document. When a circuit is revised, republish its own page (same file path keeps the URL).
 
-Build the page with `scripts/make_page.py` (`build_page(spec)`; the docstring lists the spec keys). It already implements everything below, including the print layout. Page contents, top to bottom:
+Build the page with `scripts/make_page.py` (`build_page(spec)`; the docstring lists the spec keys). Prefer passing `layout=L` (the bblayout Layout): it fills the board drawing, build list and supply note, and marks the supply leads on rail-less boards. It already implements everything below, including the print layout. Page contents, top to bottom:
 - Eyebrow (board · supply · part count), title, spec chips, one-paragraph description.
 - **Live player:** LED current resampled at 1 ms, quantised to uint8, base64-embedded. Loop over an integer number of periods, or one slow cycle from rate-minimum to rate-minimum. The LED glow opacity is (I/I_max)^0.6, with a scrolling 4 s scope on canvas and a rate readout from hysteretic onsets. It autoplays unless reduced motion is set.
 - The bblayout board SVG (strip the title text, set `viewBox`, put it in an `overflow-x:auto` container with min-width ~560 px).
@@ -265,6 +275,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Police strobe (red + blue) | `police_layout.json` | 4 NPN | alternating blinker with C1 = C2 = 3.3 µF, C3 = C4 = 47 µF, R7 = 18k, D2 blue | 9.3 Hz flashes of 36 ms, locked 4 red + 4 blue, 1.13 s cycle; 9.4 / 5.8 mA |
 | Touch flip-flop | `ff_layout.json` | 3 NPN | µA latch: R_C 220k/33k, cross 1 MΩ, 100 nF power-up cap; LED driver 3.3k base, 470 Ω | finger 0.3–3.3 MΩ, β 60–416; 6.6 mA on, 0.15 mA standby |
 | Beat see-saw | `beat_layout.json` | 2 × 555 + 1 NPN | each 555: R_A 4.7k, R_B 68k, 100 nF, 10 nF pin 5; trim 270 Ω in U1's R_B; LED R 150 Ω from OUT1; D1→OUT2, D2→NPN (base 10k from OUT2) | carriers ≈ 100.3/100.6 Hz, beat 2.7 s; LEDs swing 0–4.1 / 0.2–4.5 mA, sum constant |
+| Blinker on a mini board | `mini_blink_layout.json` | 2 NPN | as the blinker; +5 V strip column 10, resistors flat in rows g–j | 1.30 s period, ~9 mA |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

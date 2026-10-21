@@ -58,3 +58,12 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 35 | No per-page CSS hook (parts table spilled onto its own page). | Fixed: spec key `extra_css`. |
 | 36 | numpy 2 removed `np.trapz`. | Documented. |
 | 37 | Idea error: an anti-parallel LED pair between two 555 outputs is an XOR, so the LEDs cannot alternate. | Documented with the working see-saw (one NPN). |
+
+## 2026-10-21: mini breadboard (170 points, no rails)
+
+| # | Problem | Status |
+|---|---|---|
+| 38 | SKILL.md and page defaults assumed a half board with rails (rail rules, "connect to the top + rail"). | Fixed: section 3b for the mini board; supply note derived from the layout. |
+| 39 | bblayout's `instructions()` silently omits the VCC supply lead when the first VCC strip it checks is full, while `spice()` uses another hole (a10). | Fixed: `board_tools.fix_instructions()`; `build_page(layout=...)` applies it. |
+| 40 | Without rails the drawing does not show where the supply leads go. | Fixed: `mark_supply()` draws +5 V / GND leads out over the board edge; `board_svg()` keeps room for the labels. |
+| 41 | Resistor labels overlap when resistors lie in adjacent rows (bblayout renderer). | Open: cosmetic; the parts list and build order carry the refs. |

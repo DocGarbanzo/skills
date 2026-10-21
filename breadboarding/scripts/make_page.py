@@ -172,20 +172,30 @@ _CAP_NOTE = ("<b>Electrolytic polarity.</b> The <code>+</code> lead is the longe
 
 
 def board_svg(svg_text):
+    """Strip bblayout's title and crop the title band (keeps room for supply-lead labels if present)."""
     s = re.sub(r'<text x="7\.0" y="19\.[0-9]+"[^>]*>[^<]*</text>\n?', "", svg_text, count=1)
+    top = 4 if 'class="supply-mark"' in s else 25
     return re.sub(r'width="[0-9.]+" height="[0-9.]+" viewBox="0 0 ([0-9.]+) ([0-9.]+)"',
-                  lambda m: f'viewBox="0 25 {m.group(1)} {float(m.group(2))-25}" role="img" aria-label="Breadboard layout"', s, count=1)
+                  lambda m: f'viewBox="0 {top} {m.group(1)} {float(m.group(2))-top}" role="img" aria-label="Breadboard layout"', s, count=1)
 
 
 def build_page(spec):
     """spec keys:
     title, eyebrow, lede (html), specs [(label, value)], player (from player_data) and player_caption,
-    board_svg (raw bblayout svg text), board_caption, charts [(title, svg, caption)],
+    layout (bblayout Layout: fills board_svg, instructions and supply_note, incl. supply markers on rail-less boards)
+    or board_svg (raw bblayout svg text) + instructions; board_caption, charts [(title, svg, caption)],
     parts [(refs, value, note)] — value like '330', '2.2k' gets bands; prefix with '=' to print verbatim,
     instructions (Layout.instructions() text), supply_note, how (html), notes [html] (extra notes),
     has_transistors / has_electrolytics (bool; default: detected from instructions), footer (html).
     Player options live in player_data(): rate_led, show_rate.
     """
+    if "layout" in spec:                       # derive board drawing, build list and supply note from the Layout
+        from board_tools import fix_instructions, mark_supply, supply_note
+        L = spec["layout"]
+        spec = dict(spec)
+        spec.setdefault("board_svg", mark_supply(L.svg(), L))
+        spec.setdefault("instructions", fix_instructions(L.instructions(), L))
+        spec.setdefault("supply_note", supply_note(L))
     css = open(os.path.join(TEMPLATES, "page.css")).read() + "\n" + spec.get("extra_css", "")
     js = open(os.path.join(TEMPLATES, "player.js")).read()
     e = _html.escape
