@@ -86,3 +86,10 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 48 | Part labels (R1, R2, …) sat on hole rows and were hard to read; labels could overlap each other or be drawn over by later leads. | Fixed: `tidy_labels()` (opaque plates, collision-free placement avoiding labels, part bodies and column numbers, drawn last); `render_board()` used by `build_page`. A stroke halo (`paint-order`) was tried first and is not supported by cairosvg. |
 | 49 | Buttons still looked like 2-lead parts: the tactile body hid the legs, and bblayout's lead line remained. | Fixed: 6 mm body over the channel, four visible legs; bblayout's symbol and lead line removed; test checks four legs per button. |
 | 50 | No pattern for "exclusive" LEDs (red only, blue only, green only when both). | Documented (`and2_layout.json`): LED pair back to back between two pulled-down nodes, stiff base divider for the AND transistor. |
+
+## 2026-10-31: Disco-Lauflicht (red, yellow, white)
+
+| # | Problem | Status |
+|---|---|---|
+| 51 | No yellow or white LED models; no chart colours for them (white on white is invisible). | Fixed: `LEDYELLOW`, `LEDWHITE`; chart/key classes `yellow`, `white` (drawn grey). |
+| 52 | Chaser timing with mixed LED colours was undocumented: each stage's time depends on the previous LED's forward voltage. | Documented in section 5 with per-stage R_B values. |

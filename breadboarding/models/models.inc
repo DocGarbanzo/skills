@@ -4,3 +4,7 @@
 .model LEDBLUE D(Is=6.9e-17 Rs=10 N=3.5 Cjo=30p Vj=2 M=.333 Tt=50n)
 * green InGaN LED (modern 5 mm kit LEDs): Vf ~2.75 V @ 1 mA, ~2.95 V @ 10 mA, ~3.1 V @ 20 mA
 .model LEDGREEN D(Is=2.1e-16 Rs=10 N=3.5 Cjo=30p Vj=2 M=.333 Tt=50n)
+* yellow AlGaInP LED: like LEDRED shifted +0.2 V (~1.95 V @ 1 mA... ~2.0 V @ 10 mA)
+.model LEDYELLOW D(Is=11.7p Rs=42m N=3.73 Cjo=2.97p Vj=.75 M=.333 Tt=50n)
+* white LED (blue InGaN + phosphor): ~2.8 V @ 1 mA, ~3.1 V @ 10 mA, ~3.25 V @ 20 mA
+.model LEDWHITE D(Is=4e-17 Rs=10 N=3.5 Cjo=30p Vj=2 M=.333 Tt=50n)

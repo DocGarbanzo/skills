@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and", "and2"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and", "and2", "disco"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -212,3 +212,16 @@ def test_labels_readable():
     for i, a in enumerate(plates):
         for b in plates[i + 1:]:
             assert a[0] + a[2] <= b[0] + 2.5 or b[0] + b[2] <= a[0] + 2.5 or a[1] + a[3] <= b[1] + 2.5 or b[1] + b[3] <= a[1] + 2.5
+
+
+def test_disco_colours(tmp_path, monkeypatch):
+    """Red / yellow / white chaser: each LED ≈ 0.5 s, sequence D1 → D2 → D3."""
+    from sim_tools import as_built, flashes
+    monkeypatch.chdir(tmp_path)
+    t, I = as_built("disco", T="9", step="2m", layout_path=os.path.join(EXAMPLES, "disco_layout.json"))
+    starts = {k: flashes(t, I[k], t0=3) for k in ("D1", "D2", "D3")}
+    for k, (s, l) in starts.items():
+        assert abs(float(np.median(l)) - 0.49) < 0.05, (k, l)
+    s1, s2, s3 = (starts[k][0][0] for k in ("D1", "D2", "D3"))
+    order = [k for _, k in sorted([(s1, "1"), (s2, "2"), (s3, "3")])]
+    assert "".join(order) in ("123", "231", "312")

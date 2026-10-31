@@ -11,12 +11,12 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 
 ## Bundled files
 
-- `models/models.inc`: Q2N3904, LEDRED, LEDBLUE and LEDGREEN (InGaN, ≈ 2.95 V at 10 mA; older GaP greens are ≈ 2.1 V) SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
+- `models/models.inc`: Q2N3904, LEDRED (1.78 V at 10 mA), LEDYELLOW (1.98 V), LEDGREEN (InGaN, 2.95 V; older GaP greens are ≈ 2.1 V), LEDBLUE (3.05 V) and LEDWHITE (3.1 V) SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
 - `scripts/board_tools.py`: `render_board(layout)` — the board SVG for pages: readable part labels (`tidy_labels`: opaque plates, moved off other labels, part bodies and column numbers, drawn last), tactile buttons (`draw_tactile`), supply-lead markers (`mark_supply`). Also `supply_points()`, `supply_note()`, `fix_instructions()`, `check_tactile()`. Use `render_board` also for PNG checks; bblayout's raw `svg()` puts labels on hole rows where they are hard to read.
 - `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: fifteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `examples/*_layout.json`: sixteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -24,7 +24,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (31 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (34 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -167,7 +167,7 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 
 - **Injection locking:** when the slow transistor also sinks LED current, its V_CE,sat step at each flash couples through its timing cap and advances the swap, and the swap restarts the fast astable. The two lock: a constant flash count per burst (police strobe: always 4), at the price of a short cut-off flash at the swap. Unlocked value sets give 3–5 flashes with random partial ones.
 
-**Ring oscillator (odd number of RC-coupled inverters):** an odd ring has no stable state. With the LED from collector to GND (lit while that transistor is off), the collector swing is clamped at V_LED ≈ 1.8 V, so each step is t = R_B·C·ln((V_CC − V_BE + ΔV)/(V_CC − V_BE)) with ΔV ≈ 1.75 V → 0.34·R_B·C; cycle = 3 steps. Too small a collector resistor latches all-on (330 Ω failed at β 120; 470 Ω works).
+**Ring oscillator (odd number of RC-coupled inverters):** an odd ring has no stable state. With the LED from collector to GND (lit while that transistor is off), the collector swing is clamped at V_LED ≈ 1.8 V, so each step is t = R_B·C·ln((V_CC − V_BE + ΔV)/(V_CC − V_BE)) with ΔV ≈ 1.75 V → 0.34·R_B·C; cycle = 3 steps. Too small a collector resistor latches all-on (330 Ω failed at β 120; 470 Ω works). **Mixed LED colours:** the step that ends stage k's off-time is coupled from stage k−1's collector, i.e. clamped at the *previous* LED's V_F, so each stage gets its own R_B: factor 0.34 after red, 0.37 after yellow, 0.53 after white (disco chaser: R_B 10k/15k/15k with 100 µF → 0.49/0.47/0.49 s).
 
 **Touch inputs (µA level):** a fingertip is 0.3–5 MΩ: from +5 V it injects 1–15 µA; sinking a base to GND through a finger moves < 2 µA. A latch that also drives an LED needs ~0.1 mA base current and cannot be flipped by a finger. Run the latch at µA level (R_C 33k/220k, cross-coupling 1 MΩ), touch from +5 V into the *off* base (works for R_finger ≲ 7·R_cross), and drive the LED with a third NPN. A ~100 nF cap on one base defines the power-up state. Simulate the finger as a voltage-controlled switch (section 7). Touch pads: short bare wire stubs in free holes, drawn as short jumpers.
 
@@ -288,6 +288,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Blinker on a mini board | `mini_blink_layout.json` | 2 NPN | as the blinker; +5 V strip column 10, resistors flat in rows g–j | 1.30 s period, ~9 mA |
 | Rot + Blau = Grün (2 buttons, AND) | `and_layout.json` | 1 NPN | S1→A, S2→B; 330 Ω for red, blue, green; green returns through Q1 (base 10k from B, 100k pull-down) | red 9.7, blue 6.2, green 6.2 mA (8.5 mA for a 2.1 V green); green only with both pressed |
 | Rot, Blau oder Grün (exclusive) | `and2_layout.json` | 1 NPN | R1 100 Ω A→X; red X→B, blue B→X; 330 Ω pull-downs on X and B; green as above with base divider 4.7k/1k | S1: red 5.4 mA; S2: blue 6.1 mA; both: only green 6.1 mA; 34 mA with both pressed |
+| Disco-Lauflicht (red, yellow, white) | `disco_layout.json` | 3 NPN | chaser board; R_C 470, R_B 10k (after white) / 15k / 15k, C 100 µF | 0.49 / 0.47 / 0.49 s per LED, 1.52 s cycle; 6.9 / 6.5 / 4.3 mA |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

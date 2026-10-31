@@ -173,3 +173,6 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--rul
 .chart .trace.blue { stroke: var(--led-blue); } .chart .area.blue { fill: var(--led-blue-fill); } .key i.blue { background: var(--led-blue); }
 :root { --led-green: #1f9a3e; --led-green-fill: rgba(31,154,62,.12); }
 .chart .trace.green { stroke: var(--led-green); } .chart .area.green { fill: var(--led-green-fill); } .key i.green { background: var(--led-green); }
+:root { --led-yellow: #c99a00; --led-yellow-fill: rgba(201,154,0,.14); --led-white: #8a94a0; --led-white-fill: rgba(138,148,160,.14); }
+.chart .trace.yellow { stroke: var(--led-yellow); } .chart .area.yellow { fill: var(--led-yellow-fill); } .key i.yellow { background: var(--led-yellow); }
+.chart .trace.white { stroke: var(--led-white); } .chart .area.white { fill: var(--led-white-fill); } .key i.white { background: var(--led-white); }
