@@ -14,9 +14,9 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 - `models/models.inc`: Q2N3904, LEDRED, LEDBLUE and LEDGREEN (InGaN, ≈ 2.95 V at 10 mA; older GaP greens are ≈ 2.1 V) SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
-- `scripts/board_tools.py`: `supply_points()`, `supply_note()`, `fix_instructions()`, `mark_supply()` — supply-lead handling for boards without rails.
+- `scripts/board_tools.py`: `render_board(layout)` — the board SVG for pages: readable part labels (`tidy_labels`: opaque plates, moved off other labels, part bodies and column numbers, drawn last), tactile buttons (`draw_tactile`), supply-lead markers (`mark_supply`). Also `supply_points()`, `supply_note()`, `fix_instructions()`, `check_tactile()`. Use `render_board` also for PNG checks; bblayout's raw `svg()` puts labels on hole rows where they are hard to read.
 - `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: fourteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `examples/*_layout.json`: fifteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -24,7 +24,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (29 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (31 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -116,9 +116,10 @@ Variant when the bottom row g is needed for a follow-on stage (see `examples/bre
 
 - Place a button as bblayout's two-lead `button("S1", a, b)` with both pins in row e (or f), span 2 (`{"1":"e2","2":"e4"}`). The real part straddles the channel with legs in e2, e4, f2, f4: each across-channel leg pair is always connected inside the button; pressing joins column 2 to column 4.
 - So the strips on the other side of the channel under the button belong to the button's nets. Keep them free (or on the same net); `board_tools.check_tactile()` flags conflicts and `build_page(layout=...)` refuses to build a page with one.
-- `build_page(layout=...)` redraws buttons as tactile switches across the channel, and the build list names all four legs. Tell the builder: if a button seems always pressed, it is rotated 90°.
+- The user's buttons are **only** 4-leg 6 × 6 mm tactile switches; never show a 2-lead button. `render_board()` / `build_page(layout=...)` draws each as a 6 mm body over the channel with four visible legs (bblayout's 2-lead symbol and lead line are removed), and the build list names all four legs. Tell the builder: if a button seems always pressed, it is rotated 90°.
 - Simulate presses with `as_built(..., presses={"S1": [(1, 3), (6, 8)]})` (switch 0.05 Ω closed, 1 GΩ open). bblayout itself exports a button as a fixed resistor parameter.
 - No inputs float: a transistor base driven only through a button gets a pull-down (100k base→GND).
+- **Exclusive pair without a transistor:** two LEDs back to back between node X (fed from button 1 through R1, pulled down by 330 Ω) and node B (button 2, pulled down by 330 Ω): one lights for button 1 only, the other for button 2 only, neither when both are pressed (X ≈ B). B then rises to ≈ 1.7 V in the button-1 case, so any transistor driven from B needs a stiff base divider (4.7k/1k) to stay off (`examples/and2_layout.json`).
 - **AND with one NPN:** feed an LED from node A (button 1) through a resistor and return its cathode through an NPN whose base is driven from node B (button 2). It conducts only when A supplies current and B opens the transistor (`examples/and_layout.json`).
 
 ## 4. bblayout API essentials
@@ -286,6 +287,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Beat see-saw | `beat_layout.json` | 2 × 555 + 1 NPN | each 555: R_A 4.7k, R_B 68k, 100 nF, 10 nF pin 5; trim 270 Ω in U1's R_B; LED R 150 Ω from OUT1; D1→OUT2, D2→NPN (base 10k from OUT2) | carriers ≈ 100.3/100.6 Hz, beat 2.7 s; LEDs swing 0–4.1 / 0.2–4.5 mA, sum constant |
 | Blinker on a mini board | `mini_blink_layout.json` | 2 NPN | as the blinker; +5 V strip column 10, resistors flat in rows g–j | 1.30 s period, ~9 mA |
 | Rot + Blau = Grün (2 buttons, AND) | `and_layout.json` | 1 NPN | S1→A, S2→B; 330 Ω for red, blue, green; green returns through Q1 (base 10k from B, 100k pull-down) | red 9.7, blue 6.2, green 6.2 mA (8.5 mA for a 2.1 V green); green only with both pressed |
+| Rot, Blau oder Grün (exclusive) | `and2_layout.json` | 1 NPN | R1 100 Ω A→X; red X→B, blue B→X; 330 Ω pull-downs on X and B; green as above with base divider 4.7k/1k | S1: red 5.4 mA; S2: blue 6.1 mA; both: only green 6.1 mA; 34 mA with both pressed |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

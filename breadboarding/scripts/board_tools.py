@@ -153,7 +153,8 @@ def check_tactile(layout):
 
 
 def draw_tactile(svg, layout, scale=14.0):
-    """Redraw buttons as 6 x 6 mm tactile switches straddling the channel (four legs)."""
+    """Redraw buttons as 6 x 6 mm tactile switches straddling the channel: body over the channel,
+    four visible legs in e_c, e_c+2, f_c, f_c+2 (the across-channel leg pairs are connected inside)."""
     tac = _tactile(layout)
     if not tac:
         return svg
@@ -167,13 +168,86 @@ def draw_tactile(svg, layout, scale=14.0):
     g = []
     for ref, c1, c2, row, other in tac:
         # drop bblayout's own small button symbol (square + dot + label) for this ref
-        svg = re.sub(r'<g>(?:(?!<g>).)*?fill="#444"/>(?:(?!<g>).)*?>' + re.escape(ref) + r'</text></g>\n?', "", svg, count=1, flags=re.S)
+        # (its lead line just before the group, then the group with square, dot and label)
+        svg = re.sub(r'(<line [^>]*stroke="#a9a9a9"[^>]*/>\n)?<g><title>' + re.escape(ref) + r'</title>(?:(?!<g>).)*?fill="#444"/>(?:(?!<g>).)*?</g>\n?',
+                     "", svg, count=1, flags=re.S)
         xa, xb = X(c1), X(c2)
-        ya, yb = Y(_ROW_Y["e"]), Y(_ROW_Y["f"])
-        legs = "".join(f'<rect x="{x - s*0.18:.1f}" y="{y - s*0.18:.1f}" width="{s*0.36:.1f}" height="{s*0.36:.1f}" fill="#9a9a9a"/>'
-                       for x in (xa, xb) for y in (ya, yb))
-        g.append(f'<g class="tactile">{legs}<rect x="{xa - s*0.55:.1f}" y="{ya + s*0.15:.1f}" width="{xb - xa + s*1.1:.1f}" '
-                 f'height="{yb - ya - s*0.3:.1f}" rx="{s*0.15:.1f}" fill="#3a3a3a" stroke="#111"/>'
-                 f'<circle cx="{(xa + xb)/2:.1f}" cy="{(ya + yb)/2:.1f}" r="{s*0.75:.1f}" fill="#151515" stroke="#555"/>'
-                 f'<text x="{xb + s*0.75:.1f}" y="{(ya + yb)/2 + s*0.2:.1f}" font-size="{s*0.6:.1f}" fill="#222">{ref}</text></g>')
+        ye, yf = Y(_ROW_Y["e"]), Y(_ROW_Y["f"])
+        cx, cy = (xa + xb) / 2, (ye + yf) / 2
+        half = s * 1.18                                   # 6 mm body = 2.36 hole pitches, centred over the channel
+        parts = []
+        for x in (xa, xb):                                # four legs: bent metal tabs from the body to the holes
+            for y, edge in ((ye, cy - half), (yf, cy + half)):
+                parts.append(f'<line x1="{x}" y1="{edge:.1f}" x2="{x}" y2="{y}" stroke="#b8b8b8" stroke-width="{s*0.28:.1f}"/>'
+                             f'<rect x="{x - s*0.24:.1f}" y="{y - s*0.24:.1f}" width="{s*0.48:.1f}" height="{s*0.48:.1f}" fill="#c9c9c9" stroke="#777" stroke-width="0.8"/>')
+        parts.append(f'<rect x="{cx - half:.1f}" y="{cy - half:.1f}" width="{2*half:.1f}" height="{2*half:.1f}" rx="{s*0.12:.1f}" fill="#3a3a3a" stroke="#111"/>'
+                     f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{s*0.62:.1f}" fill="#151515" stroke="#555"/>'
+                     f'<text x="{cx + half + s*0.35:.1f}" y="{cy + s*0.2:.1f}" font-size="{s*0.6:.1f}" fill="#222">{ref}</text>')
+        g.append('<g class="tactile">' + "".join(parts) + '</g>')
     return svg.replace("</svg>", "".join(g) + "</svg>")
+
+
+# ---------------------------------------------------------------- readable part labels
+_LABEL = re.compile(r'<text x="([0-9.]+)" y="([0-9.]+)" font-size="([0-9.]+)" fill="#222" text-anchor="middle">([^<]+)</text>')
+
+
+def _overlap(a, b, pad=1.0):
+    return not (a[2] + pad <= b[0] or b[2] + pad <= a[0] or a[3] + pad <= b[1] or b[3] + pad <= a[1])
+
+
+def tidy_labels(svg, scale=14.0):
+    """Make bblayout's part labels readable: a halo in the board colour hides the holes behind each label,
+    and a label that would overlap another label or a part body moves below, right or left of its part.
+    Labels are moved to the end of the SVG so no later lead or wire is drawn over them; they also avoid
+    column numbers, pin letters and rail names."""
+    s = scale
+    obstacles = []
+    for m in re.finditer(r'<circle cx="([0-9.]+)" cy="([0-9.]+)" r="([0-9.]+)"', svg):
+        cx, cy, r = map(float, m.groups())
+        if r >= s * 0.4:                                   # LED / capacitor / electrolytic bodies
+            obstacles.append(((cx, cy), (cx - r, cy - r, cx + r, cy + r)))
+    for m in re.finditer(r'<rect x="([0-9.-]+)" y="([0-9.-]+)" width="([0-9.]+)" height="([0-9.]+)" rx="([0-9.]+)"[^>]*?(?:rotate\(([-0-9.]+) ([0-9.]+) ([0-9.]+)\))?', svg):
+        x, y, w, h = map(float, m.groups()[:4])
+        if w > 300 or h > 200:                             # board outline
+            continue
+        cx, cy = x + w / 2, y + h / 2
+        if m.group(6) and abs(abs(float(m.group(6))) % 180 - 90) < 1:
+            w, h = h, w
+        obstacles.append(((cx, cy), (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)))
+    for m in re.finditer(r'<text x="([0-9.]+)" y="([0-9.]+)" font-size="([0-9.]+)"[^>]*?(?:text-anchor="(\w+)")?[^>]*>([^<]*)</text>', svg):
+        if _LABEL.fullmatch(m.group(0)):
+            continue
+        x, y, fs = float(m.group(1)), float(m.group(2)), float(m.group(3))
+        w = 0.6 * fs * max(len(m.group(5)), 1)
+        x0 = x - w / 2 if m.group(4) == "middle" else (x - w if m.group(4) == "end" else x)
+        obstacles.append(((-1e9, -1e9), (x0, y - fs * 0.8, x0 + w, y + fs * 0.2)))   # column numbers, pin letters, rail names
+    placed = []
+    plates = []
+
+    def fix(m):
+        x, y, fs, text = float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4)
+        mx, my = x, y + s * 0.7                            # the part's centre
+        w, h = 0.62 * fs * len(text) + 2, fs
+        cands = [(mx, my - s * 0.7), (mx, my + s * 1.05 + fs * 0.35), (mx + s * 0.75 + w / 2, my + fs * 0.35),
+                 (mx - s * 0.75 - w / 2, my + fs * 0.35), (mx, my - s * 1.25)]
+        best = cands[0]
+        for cx, cy in cands:
+            box = (cx - w / 2, cy - h * 0.8, cx + w / 2, cy + h * 0.2)
+            own = lambda o: abs(o[0][0] - mx) < 1 and abs(o[0][1] - my) < 1
+            if not any(_overlap(box, p) for p in placed) and not any(_overlap(box, o[1], 0) for o in obstacles if not own(o)):
+                best = (cx, cy)
+                break
+        cx, cy = best
+        placed.append((cx - w / 2, cy - h * 0.8, cx + w / 2, cy + h * 0.2))
+        bx0, by0, bx1, by1 = placed[-1]
+        # opaque plate in the board colour (works in every renderer; paint-order halos do not, e.g. cairosvg)
+        plates.append(f'<rect x="{bx0 - 1:.1f}" y="{by0 - 1:.1f}" width="{bx1 - bx0 + 2:.1f}" height="{by1 - by0 + 2:.1f}" rx="2" fill="#f2efe6" fill-opacity="0.92"/>'
+                      f'<text x="{cx:.1f}" y="{cy:.1f}" font-size="{fs}" fill="#222" text-anchor="middle" font-weight="600">{text}</text>')
+        return ""
+    svg = _LABEL.sub(fix, svg)
+    return svg.replace("</svg>", '<g class="labels">' + "".join(plates) + "</g></svg>")   # labels on top of everything
+
+
+def render_board(layout):
+    """Board SVG for pages: readable labels, tactile buttons, supply-lead markers (rail-less boards)."""
+    return tidy_labels(mark_supply(draw_tactile(layout.svg(), layout), layout))   # tactile first: it removes bblayout's button symbol and label

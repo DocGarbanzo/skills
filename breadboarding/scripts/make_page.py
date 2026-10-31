@@ -237,13 +237,13 @@ def build_page(spec):
     Player options live in player_data(): rate_led, show_rate.
     """
     if "layout" in spec:                       # derive board drawing, build list and supply note from the Layout
-        from board_tools import check_tactile, draw_tactile, fix_instructions, mark_supply, supply_note
+        from board_tools import check_tactile, fix_instructions, render_board, supply_note
         L = spec["layout"]
         bad = check_tactile(L)
         if bad:
             raise ValueError("tactile button conflicts: " + "; ".join(bad))
         spec = dict(spec)
-        spec.setdefault("board_svg", draw_tactile(mark_supply(L.svg(), L), L))
+        spec.setdefault("board_svg", render_board(L))
         spec.setdefault("instructions", fix_instructions(L.instructions(), L))
         spec.setdefault("supply_note", supply_note(L, lang=spec.get("lang", "en")))
     lang = spec.get("lang", "en")

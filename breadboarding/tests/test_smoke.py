@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and", "and2"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -185,3 +185,30 @@ def test_german_page():
                            charts=[], parts=[("R1", "330", "x")], how="<p>x</p>", footer="x"))
     assert "Aufbau Schritt für Schritt" in html and "Taster" in html and "Drahtbrücke" in html and "Beine" in html
     assert 'class="tactile"' in html and 'fill="#444"' not in html
+    assert html.count('fill="#c9c9c9"') == 8          # two buttons, four legs each
+
+
+def test_exclusive_leds(tmp_path, monkeypatch):
+    """and2: red for S1 only, blue for S2 only, only green when both are pressed."""
+    from sim_tools import as_built
+    monkeypatch.chdir(tmp_path)
+    t, I = as_built("and2", T="4", step="2m", layout_path=os.path.join(EXAMPLES, "and2_layout.json"),
+                    presses={"S1": [(0.5, 2.5)], "S2": [(1.5, 3.5)]})
+    at = lambda k, x: float(np.interp(x, t, I[k])) * 1e3
+    assert at("D1", 1.0) > 4 and at("D2", 1.0) < 0.1 and at("D3", 1.0) < 0.1
+    assert at("D1", 2.0) < 0.1 and at("D2", 2.0) < 0.1 and at("D3", 2.0) > 4
+    assert at("D1", 3.0) < 0.1 and at("D2", 3.0) > 4 and at("D3", 3.0) < 0.1
+
+
+def test_labels_readable():
+    """render_board: every part label sits on an opaque plate in a label group drawn last; no two labels overlap."""
+    import re
+    from bblayout import Layout
+    from board_tools import render_board
+    svg = render_board(Layout.load(os.path.join(EXAMPLES, "mini_blink_layout.json")))
+    g = svg[svg.index('<g class="labels">'):]
+    plates = [tuple(map(float, m.groups())) for m in re.finditer(r'<rect x="([0-9.-]+)" y="([0-9.-]+)" width="([0-9.]+)" height="([0-9.]+)"', g)]
+    assert len(plates) >= 7
+    for i, a in enumerate(plates):
+        for b in plates[i + 1:]:
+            assert a[0] + a[2] <= b[0] + 2.5 or b[0] + b[2] <= a[0] + 2.5 or a[1] + a[3] <= b[1] + 2.5 or b[1] + b[3] <= a[1] + 2.5

@@ -78,3 +78,11 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 45 | Buttons were exported as a fixed resistor parameter; no way to simulate presses. | Fixed: `as_built(presses={...})`. |
 | 46 | Build-list parser failed on parts without a value ("Insert S1 (button)"). | Fixed. |
 | 47 | No green LED model or green chart colour. | Fixed: `LEDGREEN` (InGaN); chart/key class `green`. |
+
+## 2026-10-31: readable labels, four-leg buttons, exclusive LEDs
+
+| # | Problem | Status |
+|---|---|---|
+| 48 | Part labels (R1, R2, …) sat on hole rows and were hard to read; labels could overlap each other or be drawn over by later leads. | Fixed: `tidy_labels()` (opaque plates, collision-free placement avoiding labels, part bodies and column numbers, drawn last); `render_board()` used by `build_page`. A stroke halo (`paint-order`) was tried first and is not supported by cairosvg. |
+| 49 | Buttons still looked like 2-lead parts: the tactile body hid the legs, and bblayout's lead line remained. | Fixed: 6 mm body over the channel, four visible legs; bblayout's symbol and lead line removed; test checks four legs per button. |
+| 50 | No pattern for "exclusive" LEDs (red only, blue only, green only when both). | Documented (`and2_layout.json`): LED pair back to back between two pulled-down nodes, stiff base divider for the AND transistor. |
