@@ -2,3 +2,5 @@
 .model LEDRED D(Is=93.2p Rs=42m N=3.73 Cjo=2.97p Vj=.75 M=.333 Tt=50n)
 * blue InGaN LED: Vf ~2.9 V @ 1 mA, ~3.05 V @ 10 mA, ~3.2 V @ 20 mA (fit to typical 5 mm datasheets)
 .model LEDBLUE D(Is=6.9e-17 Rs=10 N=3.5 Cjo=30p Vj=2 M=.333 Tt=50n)
+* green InGaN LED (modern 5 mm kit LEDs): Vf ~2.75 V @ 1 mA, ~2.95 V @ 10 mA, ~3.1 V @ 20 mA
+.model LEDGREEN D(Is=2.1e-16 Rs=10 N=3.5 Cjo=30p Vj=2 M=.333 Tt=50n)

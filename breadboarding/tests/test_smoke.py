@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -150,3 +150,38 @@ def test_mini_board_supply(tmp_path, monkeypatch):
     t, i = as_built("mini_blink", T="10", step="2m", layout_path=os.path.join(EXAMPLES, "mini_blink_layout.json"))
     s, _ = flashes(t, i, t0=3)
     assert abs(float(np.diff(s).mean()) - 1.30) / 1.30 < 0.05
+
+
+def test_buttons_and_gate(tmp_path, monkeypatch):
+    """presses= drives the buttons: green lights only while both are pressed; tactile check passes."""
+    from bblayout import Layout
+    from board_tools import check_tactile
+    from sim_tools import as_built
+    path = os.path.join(EXAMPLES, "and_layout.json")
+    assert check_tactile(Layout.load(path)) == []
+    monkeypatch.chdir(tmp_path)
+    t, I = as_built("and", T="4", step="2m", layout_path=path, presses={"S1": [(0.5, 3.5)], "S2": [(1.5, 2.5), (3.0, 3.8)]})
+    at = lambda k, x: float(np.interp(x, t, I[k])) * 1e3
+    assert at("D1", 1.0) > 5 and at("D3", 1.0) < 0.1          # S1 only: red, no green
+    assert at("D2", 2.0) > 3 and at("D3", 2.0) > 3            # both: green on
+    assert at("D2", 3.6) > 3 and at("D3", 3.6) < 0.1          # S2 only: blue, no green
+
+
+def test_tactile_conflict_detected():
+    from bblayout import Layout
+    from board_tools import check_tactile
+    d = json.load(open(os.path.join(EXAMPLES, "and_layout.json")))
+    d["wires"].append({"from": "j2", "to": "B-2", "net": "GND", "color": "black"})   # uses the strip under S1's legs
+    assert check_tactile(Layout.from_dict(d))
+
+
+def test_german_page():
+    from bblayout import Layout
+    from make_page import build_page, player_data
+    L = Layout.load(os.path.join(EXAMPLES, "and_layout.json"))
+    t = np.linspace(0, 2, 2001)
+    html = build_page(dict(lang="de", layout=L, title="T", eyebrow="x", lede="x", specs=[("A", "1")],
+                           player=player_data(t, {"D1": 0.01 * (t > 1)}, 0, 2, show_rate=False), board_caption="x",
+                           charts=[], parts=[("R1", "330", "x")], how="<p>x</p>", footer="x"))
+    assert "Aufbau Schritt für Schritt" in html and "Taster" in html and "Drahtbrücke" in html and "Beine" in html
+    assert 'class="tactile"' in html and 'fill="#444"' not in html

@@ -67,3 +67,14 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 39 | bblayout's `instructions()` silently omits the VCC supply lead when the first VCC strip it checks is full, while `spice()` uses another hole (a10). | Fixed: `board_tools.fix_instructions()`; `build_page(layout=...)` applies it. |
 | 40 | Without rails the drawing does not show where the supply leads go. | Fixed: `mark_supply()` draws +5 V / GND leads out over the board edge; `board_svg()` keeps room for the labels. |
 | 41 | Resistor labels overlap when resistors lie in adjacent rows (bblayout renderer). | Open: cosmetic; the parts list and build order carry the refs. |
+
+## 2026-10-31: Rot + Blau = Grün (two push buttons, AND, German page)
+
+| # | Problem | Status |
+|---|---|---|
+| 42 | Pages were English-only; the user now writes German. | Fixed: `build_page(lang="de")` translates headings, build list, notes, player and supply note. |
+| 43 | SKILL.md said a T−→a resistor (span 2) is accepted; bblayout rejects it (T+→a is 3). | Fixed: rule corrected (resistor to a − rail lands in row b or i). |
+| 44 | Buttons: bblayout models a 2-lead part and draws a small square; the real 6×6 mm button has 4 legs across the channel that join the strips on both sides. | Fixed: `draw_tactile()`, 4-leg build step, `check_tactile()` (refuses pages with conflicts). |
+| 45 | Buttons were exported as a fixed resistor parameter; no way to simulate presses. | Fixed: `as_built(presses={...})`. |
+| 46 | Build-list parser failed on parts without a value ("Insert S1 (button)"). | Fixed. |
+| 47 | No green LED model or green chart colour. | Fixed: `LEDGREEN` (InGaN); chart/key class `green`. |

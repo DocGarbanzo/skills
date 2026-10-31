@@ -15,14 +15,14 @@
     const src=(d.rate_led==null)?qs:[qs[d.rate_led]];   // rate from any LED, or from one LED (e.g. a chaser's cycle)
     for(let i=0;i<n;i++){ let v=0; for(const q of src) if(q[i]>v) v=q[i];
       if(!st && v>153){st=true; on.push(i*dt);} else if(st && v<77) st=false; }
-    const p={el,qs,cs,sm,smax,n,dt,T,on,imax:d.imax_mA,t:0,playing:false,
+    const p={el,qs,cs,sm,smax,n,dt,T,on,imax:d.imax_mA,t:0,playing:false,labels:Object.assign({play:'Play',pause:'Pause',of:'of',now:'now'},d.labels||{}),
       canvas:el.querySelector('canvas'), glows:[...el.querySelectorAll('.glow')],
       rate:el.querySelector('.rate'), curs:[...el.querySelectorAll('.cur')], tpos:el.querySelector('.tpos'),
       btn:el.querySelector('.play')};
     p.btn.addEventListener('click',()=>{ p.playing=!p.playing; sync(p); if(p.playing) kick(); });
     players.push(p); draw(p);
   });
-  function sync(p){ p.btn.textContent=p.playing?'Pause':'Play'; p.btn.setAttribute('aria-pressed',p.playing); }
+  function sync(p){ const L=p.labels; p.btn.textContent=p.playing?L.pause:L.play; p.btn.setAttribute('aria-pressed',p.playing); }
   function sample(p,k,t){ const i=Math.floor(((t%p.T)+p.T)%p.T/p.dt); return p.qs[k][i]/255; }
   function avg(p,k,t){ // mean over the last p.sm samples, wrapping around the loop
     if(p.sm<=1) return sample(p,k,t);
@@ -46,7 +46,7 @@
     g.strokeStyle=css('--scope-grid'); g.lineWidth=1; g.font='10px ui-monospace, monospace'; g.fillStyle=css('--scope-text');
     for(let s=0;s<=win;s++){ const x=w*s/win; g.beginPath(); g.moveTo(x+.5,top); g.lineTo(x+.5,bot); g.stroke(); }
     for(let k=0;k<=2;k++){ const y=top+H*k/2; g.beginPath(); g.moveTo(0,y+.5); g.lineTo(w,y+.5); g.stroke(); }
-    g.fillText((p.imax*p.smax).toFixed(1)+' mA',4,top+10); g.fillText('−4 s',2,h-5); g.textAlign='right'; g.fillText('now',w-3,h-5); g.textAlign='left';
+    g.fillText((p.imax*p.smax).toFixed(1)+' mA',4,top+10); g.fillText('−4 s',2,h-5); g.textAlign='right'; g.fillText(p.labels.now,w-3,h-5); g.textAlign='left';
     const TRACE={red:'#ff5a4e',blue:'#4f9bff',green:'#4fe07a',yellow:'#ffd84a',white:'#e8eef8'};
     const named=DATA[p.el.dataset.key].leds.map(l=>l.color&&l.color!=='red'?TRACE[l.color]:null);
     const t0=p.t-win, cols=[css('--scope-trace'), css('--scope-trace-2')||'#ffb43a', css('--scope-trace-3')||'#4fb3e8', css('--scope-trace-4')||'#7bd36a'];
@@ -65,7 +65,7 @@
       if(p.glows[k]) p.glows[k].style.opacity=Math.pow(v,0.6).toFixed(3);
       if(p.curs[k]) p.curs[k].textContent=(v*p.imax).toFixed(1); });
     if(p.rate){ const r=rateAt(p,p.t); p.rate.textContent=r?r.toFixed(r<10?2:1):'–'; }
-    p.tpos.textContent='t = '+(((p.t%p.T)+p.T)%p.T).toFixed(1)+' s of '+p.T.toFixed(1)+' s';
+    p.tpos.textContent='t = '+(((p.t%p.T)+p.T)%p.T).toFixed(1)+' s '+p.labels.of+' '+p.T.toFixed(1)+' s';
   }
   let last=null, running=false;
   function frame(ts){

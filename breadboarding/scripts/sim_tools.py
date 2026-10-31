@@ -48,7 +48,7 @@ def _check_complete(t, T, name):
         raise SimError(f"{name}: transient stopped at t = {t[-1]:.4g} s of {T}; check model warnings in the log")
 
 
-def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, parasitic_L="auto"):
+def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, presses=None, parasitic_L="auto"):
     """Simulate the as-placed board (breadboard parasitics included).
 
     Every LED (or only those listed in `leds`, e.g. ["D1","D2"]) gets a 0 V sense source.
@@ -61,6 +61,8 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     "auto" (default): False for boards with an NE555, otherwise True with one retry without them when
     ngspice reports "timestep too small". nH inductors next to the 1 mV-sharp behavioural NE555 switches make
     the transient stiff (failures, or > 10 min for 8 s at 10 us); at LED time scales they do nothing.
+    `presses` = {"S1": [(t_on, t_off), ...]} replaces each button's fixed resistor by a switch closed in
+    those windows (0.05 Ω closed, 1 GΩ open); buttons not listed stay open.
     `timeout` (s) bounds the ngspice run; long runs at fine steps take minutes, so keep T to a few slow cycles.
     """
     path = layout_path or f"{key}_layout.json"
@@ -74,6 +76,16 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
         s, n = re.subn(rf"^{r} {r}_A {r}_K", f"VS_{r} {r}_A {r}_mid 0\n{r} {r}_mid {r}_K", s, flags=re.M)
         if n != 1:
             raise SimError(f"LED {r} not found in netlist")
+    for ref, windows in (presses or {}).items():
+        pts = ["0 0"]
+        for a, b in sorted(windows):
+            pts += [f"{a} 0", f"{a + 1e-3} 1", f"{b} 1", f"{b + 1e-3} 0"]
+        s, n = re.subn(rf"^R{ref} (\S+) (\S+) \{{R_{ref}\}}.*$",
+                       rf"SW_{ref} \1 \2 ctl_{ref} 0 BTN_SW\nVCTL_{ref} ctl_{ref} 0 PWL({' '.join(pts)})", s, flags=re.M)
+        if n != 1:
+            raise SimError(f"button {ref} not found in the netlist")
+    if presses:
+        s = re.sub(r"^(\.tran )", ".model BTN_SW SW(vt=0.5 vh=0.1 ron=0.05 roff=1e9)\n\\1", s, count=1, flags=re.M)
     npn, led_models = _models(models_path)
     if beta is not None:
         npn = re.sub(r"Bf=[0-9.eE+-]+", f"Bf={beta}", npn)

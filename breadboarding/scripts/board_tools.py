@@ -55,10 +55,15 @@ def supply_points(layout):
     return out
 
 
-def supply_note(layout):
+def supply_note(layout, lang="en"):
     p = supply_points(layout)
     if layout.board.rails:
-        return ("Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail.")
+        if lang == "de":
+            return "Versorgung zuletzt anschließen: +5 V an die obere <code>+</code>-Schiene, Masse an die obere <code>−</code>-Schiene."
+        return "Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail."
+    if lang == "de":
+        return (f"Versorgung zuletzt anschließen: +5-V-Leitung in <code>{p['VCC']}</code>, Masse in <code>{p['GND']}</code> "
+                "(in der Zeichnung markiert). Dieses Brett hat keine Versorgungsschienen; nur diese beiden Löcher führen Spannung.")
     return (f"Connect the supply last: +5 V lead into <code>{p['VCC']}</code>, ground lead into <code>{p['GND']}</code> "
             "(marked on the drawing). This board has no power rails, so these two holes are the only supply connections.")
 
@@ -107,3 +112,68 @@ def mark_supply(svg, layout, scale=14.0):
         w, h = float(m.group(1)), float(m.group(2)) + grow
         svg = svg.replace(m.group(0), f'width="{w}" height="{h}" viewBox="0 0 {w} {h}"', 1)
     return svg.replace("</svg>", "".join(marks) + "</svg>")
+
+
+# ---------------------------------------------------------------- 4-leg tactile buttons (6 x 6 mm)
+def _tactile(layout):
+    """Buttons placed as bblayout two-lead parts in row e (or f) with span 2: the real part has four legs
+    straddling the channel (e_c, e_c+2, f_c, f_c+2); each across-channel pair is connected inside the button."""
+    out = []
+    for ref, pl in layout.placements.items():
+        comp = layout.schematic.components.get(ref)
+        if comp is None or comp.kind != "button":
+            continue
+        h = sorted(pl.pins.values(), key=lambda x: x.col)
+        if len(h) == 2 and h[0].row == h[1].row and h[0].row in "ef" and h[1].col - h[0].col == 2:
+            other = "f" if h[0].row == "e" else "e"
+            out.append((ref, h[0].col, h[1].col, h[0].row, other))
+    return out
+
+
+def check_tactile(layout):
+    """Issues if a strip that a tactile button bridges across the channel is used by anything else."""
+    issues = []
+    tac = _tactile(layout)
+    if not tac:
+        return issues
+    occ = {}
+    for ref, pl in layout.placements.items():
+        for h in pl.pins.values():
+            occ.setdefault(str(h), ref)
+    for w in layout.wires:
+        occ.setdefault(str(w.start), "wire"); occ.setdefault(str(w.end), "wire")
+    for ref, c1, c2, row, other in tac:
+        rows = "fghij" if other == "f" else "abcde"
+        for c in (c1, c2):
+            used = [f"{r}{c}" for r in rows if f"{r}{c}" in occ and occ[f"{r}{c}"] != ref]
+            if used:
+                issues.append(f"{ref}: its leg {other}{c} joins column {c} across the channel, but {', '.join(used)} is used "
+                              f"({occ[used[0]]}); keep that strip free or on the same net")
+    return issues
+
+
+def draw_tactile(svg, layout, scale=14.0):
+    """Redraw buttons as 6 x 6 mm tactile switches straddling the channel (four legs)."""
+    tac = _tactile(layout)
+    if not tac:
+        return svg
+    s = scale
+    rails = layout.board.rails
+    x0 = 1 - 2.0
+    y0 = -6.0 if rails else -2.5
+    pad_top = 2.0 if layout.schematic.name else 0.0
+    X = lambda x: round((x - x0) * s, 2)
+    Y = lambda y: round((y - y0 + pad_top) * s, 2)
+    g = []
+    for ref, c1, c2, row, other in tac:
+        # drop bblayout's own small button symbol (square + dot + label) for this ref
+        svg = re.sub(r'<g>(?:(?!<g>).)*?fill="#444"/>(?:(?!<g>).)*?>' + re.escape(ref) + r'</text></g>\n?', "", svg, count=1, flags=re.S)
+        xa, xb = X(c1), X(c2)
+        ya, yb = Y(_ROW_Y["e"]), Y(_ROW_Y["f"])
+        legs = "".join(f'<rect x="{x - s*0.18:.1f}" y="{y - s*0.18:.1f}" width="{s*0.36:.1f}" height="{s*0.36:.1f}" fill="#9a9a9a"/>'
+                       for x in (xa, xb) for y in (ya, yb))
+        g.append(f'<g class="tactile">{legs}<rect x="{xa - s*0.55:.1f}" y="{ya + s*0.15:.1f}" width="{xb - xa + s*1.1:.1f}" '
+                 f'height="{yb - ya - s*0.3:.1f}" rx="{s*0.15:.1f}" fill="#3a3a3a" stroke="#111"/>'
+                 f'<circle cx="{(xa + xb)/2:.1f}" cy="{(ya + yb)/2:.1f}" r="{s*0.75:.1f}" fill="#151515" stroke="#555"/>'
+                 f'<text x="{xb + s*0.75:.1f}" y="{(ya + yb)/2 + s*0.2:.1f}" font-size="{s*0.6:.1f}" fill="#222">{ref}</text></g>')
+    return svg.replace("</svg>", "".join(g) + "</svg>")

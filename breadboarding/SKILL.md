@@ -11,12 +11,12 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 
 ## Bundled files
 
-- `models/models.inc`: Q2N3904, LEDRED and LEDBLUE SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
+- `models/models.inc`: Q2N3904, LEDRED, LEDBLUE and LEDGREEN (InGaN, ≈ 2.95 V at 10 mA; older GaP greens are ≈ 2.1 V) SPICE models (the single source of truth; `as_built()` reads them from here). bblayout names an LED's model after its value (`led(..., "blue")` → `LED_BLUE`); add `LED<COLOUR>` here before using another colour. A blue LED drops ≈ 3.05 V at 10 mA vs 1.8 V for red: shared-resistor designs then give different currents and loading per LED (police strobe: R7 18k balances the bursts).
 - `models/ne555.lib`: behavioural NE555 subcircuit (pins 1–8 in DIP order). It is debugged; see section 8.
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
 - `scripts/board_tools.py`: `supply_points()`, `supply_note()`, `fix_instructions()`, `mark_supply()` — supply-lead handling for boards without rails.
 - `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: thirteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `examples/*_layout.json`: fourteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -24,7 +24,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (25 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (29 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -63,7 +63,7 @@ Copy `models/` into the working directory, and keep a pristine copy of `models.i
 - Hole names: `e12`, `T+6`, `B-14`.
 
 **Footprint spans** (holes between leads):
-- Resistors: 3–8. They lie flat and cover the holes in between. A rail-to-row-a/j vertical lead counts: T+ to a (2) and B+ to j (2) are accepted, but j to B− (1) is too short.
+- Resistors: 3–8. They lie flat and cover the holes in between. Vertical rail leads count rows: T+→a and B+→j are 3 (accepted); T−→a and B−→j are only 2 (rejected), so a resistor to a − rail must land in row b (`T-12→b12`) or i.
 - LEDs: 1–3.
 - Electrolytics: 1–3, and may go into a rail hole adjacent to row a/j or i (for example `{"+":"j18","-":"B-18"}`).
 - Ceramics behave like two-lead parts.
@@ -111,6 +111,15 @@ Variant when the bottom row g is needed for a follow-on stage (see `examples/bre
 - bblayout's `instructions()` picks the supply hole from the first strip of a net and **silently omits VCC** when that strip is full, while its SPICE export picks another free hole. Use `board_tools.fix_instructions()` (or pass `layout=` to `build_page`, which does it) so the build list and the drawing name the same holes as the simulation.
 - Mark the supply-lead holes on the drawing (`mark_supply()`; automatic with `build_page(layout=...)`): with no rails, a lead one column off powers nothing. The page caption should say so.
 - `as_built()` works unchanged; the 2-NPN blinker gives 1.30 s on the mini board vs 1.33 s on the half board.
+
+## 3c. Push buttons (6 × 6 mm tactile, 4 legs)
+
+- Place a button as bblayout's two-lead `button("S1", a, b)` with both pins in row e (or f), span 2 (`{"1":"e2","2":"e4"}`). The real part straddles the channel with legs in e2, e4, f2, f4: each across-channel leg pair is always connected inside the button; pressing joins column 2 to column 4.
+- So the strips on the other side of the channel under the button belong to the button's nets. Keep them free (or on the same net); `board_tools.check_tactile()` flags conflicts and `build_page(layout=...)` refuses to build a page with one.
+- `build_page(layout=...)` redraws buttons as tactile switches across the channel, and the build list names all four legs. Tell the builder: if a button seems always pressed, it is rotated 90°.
+- Simulate presses with `as_built(..., presses={"S1": [(1, 3), (6, 8)]})` (switch 0.05 Ω closed, 1 GΩ open). bblayout itself exports a button as a fixed resistor parameter.
+- No inputs float: a transistor base driven only through a button gets a pull-down (100k base→GND).
+- **AND with one NPN:** feed an LED from node A (button 1) through a resistor and return its cathode through an NPN whose base is driven from node B (button 2). It conducts only when A supplies current and B opens the transistor (`examples/and_layout.json`).
 
 ## 4. bblayout API essentials
 
@@ -200,7 +209,7 @@ L.save("x_layout.json"); svg = L.svg(); steps = L.instructions()
 
 **One document per circuit by default.** Each circuit gets its own artifact page (title = circuit name, e.g. "Blinker"). Put several circuits on one tabbed page only when the user asks for a combined document. When a circuit is revised, republish its own page (same file path keeps the URL).
 
-Build the page with `scripts/make_page.py` (`build_page(spec)`; the docstring lists the spec keys). Prefer passing `layout=L` (the bblayout Layout): it fills the board drawing, build list and supply note, and marks the supply leads on rail-less boards. It already implements everything below, including the print layout. Page contents, top to bottom:
+Build the page with `scripts/make_page.py` (`build_page(spec)`; the docstring lists the spec keys). **Write the page in the user's language:** `lang="de"` switches all built-in texts (headings, build list, notes, player, supply note) to German; write your own texts in that language too (decimal commas in German). Prefer passing `layout=L` (the bblayout Layout): it fills the board drawing, build list and supply note, and marks the supply leads on rail-less boards. It already implements everything below, including the print layout. Page contents, top to bottom:
 - Eyebrow (board · supply · part count), title, spec chips, one-paragraph description.
 - **Live player:** LED current resampled at 1 ms, quantised to uint8, base64-embedded. Loop over an integer number of periods, or one slow cycle from rate-minimum to rate-minimum. The LED glow opacity is (I/I_max)^0.6, with a scrolling 4 s scope on canvas and a rate readout from hysteretic onsets. It autoplays unless reduced motion is set.
 - The bblayout board SVG (strip the title text, set `viewBox`, put it in an `overflow-x:auto` container with min-width ~560 px).
@@ -276,6 +285,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Touch flip-flop | `ff_layout.json` | 3 NPN | µA latch: R_C 220k/33k, cross 1 MΩ, 100 nF power-up cap; LED driver 3.3k base, 470 Ω | finger 0.3–3.3 MΩ, β 60–416; 6.6 mA on, 0.15 mA standby |
 | Beat see-saw | `beat_layout.json` | 2 × 555 + 1 NPN | each 555: R_A 4.7k, R_B 68k, 100 nF, 10 nF pin 5; trim 270 Ω in U1's R_B; LED R 150 Ω from OUT1; D1→OUT2, D2→NPN (base 10k from OUT2) | carriers ≈ 100.3/100.6 Hz, beat 2.7 s; LEDs swing 0–4.1 / 0.2–4.5 mA, sum constant |
 | Blinker on a mini board | `mini_blink_layout.json` | 2 NPN | as the blinker; +5 V strip column 10, resistors flat in rows g–j | 1.30 s period, ~9 mA |
+| Rot + Blau = Grün (2 buttons, AND) | `and_layout.json` | 1 NPN | S1→A, S2→B; 330 Ω for red, blue, green; green returns through Q1 (base 10k from B, 100k pull-down) | red 9.7, blue 6.2, green 6.2 mA (8.5 mA for a 2.1 V green); green only with both pressed |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

@@ -171,3 +171,5 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--rul
 .led.white .glow { background: radial-gradient(circle at 50% 40%, #ffffff 0%, #f1f5ff 40%, #b9c8e6 75%); box-shadow: 0 0 28px 10px rgba(235,242,255,.9); }
 :root { --led-blue: #1d5fd8; --led-blue-fill: rgba(29,95,216,.12); }
 .chart .trace.blue { stroke: var(--led-blue); } .chart .area.blue { fill: var(--led-blue-fill); } .key i.blue { background: var(--led-blue); }
+:root { --led-green: #1f9a3e; --led-green-fill: rgba(31,154,62,.12); }
+.chart .trace.green { stroke: var(--led-green); } .chart .area.green { fill: var(--led-green-fill); } .key i.green { background: var(--led-green); }

@@ -50,9 +50,32 @@ def pretty_ohms(value):
     return f"{r:g} Ω"
 
 
+# ---------------------------------------------------------------- UI strings (lang="en" | "de")
+STR = {
+    "en": dict(parts="Parts", build="Build order", how="How it works", before="Before you power up", live="Live simulation",
+               play="Play", pause="Pause", of="of", now="now", ref="Ref", value="Value", note="Note", time="time (s)",
+               jumper="{col} jumper, about {ln}\"", player_caption="Real-time replay of the ngspice LED current; the trace shows the last 4 seconds.",
+               supply_rail="Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail.",
+               kinds={"inline-3": "transistor", "led": "LED", "electrolytic": "electrolytic capacitor", "resistor": "resistor",
+                      "capacitor": "capacitor", "button": "push button", "DIP-8": "chip (DIP-8), notch facing {side}"},
+               colors={}, sides={"left": "left", "right": "right"}),
+    "de": dict(parts="Bauteile", build="Aufbau Schritt für Schritt", how="So funktioniert es", before="Vor dem Einschalten",
+               live="Live-Simulation", play="Start", pause="Pause", of="von", now="jetzt", ref="Bez.", value="Wert", note="Hinweis",
+               time="Zeit (s)", jumper="{col} Drahtbrücke, ca. {ln}\"",
+               player_caption="Echtzeit-Wiedergabe des simulierten LED-Stroms (ngspice); die Kurve zeigt die letzten 4 Sekunden.",
+               supply_rail="Versorgung zuletzt anschließen: +5 V an die obere <code>+</code>-Schiene, Masse an die obere <code>−</code>-Schiene.",
+               kinds={"inline-3": "Transistor", "led": "LED", "electrolytic": "Elko", "resistor": "Widerstand",
+                      "capacitor": "Kondensator", "button": "Taster", "DIP-8": "Chip (DIP-8), Kerbe nach {side}"},
+               colors={"red": "Rote", "black": "Schwarze", "yellow": "Gelbe", "green": "Grüne", "blue": "Blaue", "orange": "Orange", "white": "Weiße"},
+               sides={"left": "links", "right": "rechts"}),
+}
+_LED_DE = {"red": "rot", "blue": "blau", "green": "grün", "yellow": "gelb", "white": "weiß"}
+
+
 # ---------------------------------------------------------------- build steps
-def steps_html(instructions):
-    """Convert bblayout Layout.instructions() text into <li> items."""
+def steps_html(instructions, lang="en"):
+    """Convert bblayout Layout.instructions() text into <li> items (lang "en" or "de")."""
+    T = STR[lang]
     items = []
     for block in re.split(r"\n(?=\d+\. )", instructions):
         if not re.match(r"\d+\. ", block):
@@ -63,17 +86,35 @@ def steps_html(instructions):
         if wm:
             col, ln, a, b, net = wm.groups()
             items.append(f'<li><span class="sw" style="--w:var(--wire-{col})"></span>'
-                         f'<span class="what">{col.capitalize()} jumper, about {ln}"</span>'
+                         f'<span class="what">{T["jumper"].format(col=T["colors"].get(col, col.capitalize()), ln=ln if lang == "en" else ln.replace(".", ","))}</span>'
                          f'<span class="holes"><code>{a}</code> → <code>{b}</code></span><span class="net">{net}</span></li>')
             continue
-        hm = re.match(r"Insert (\w+) (\S+) \(([^)]+)\)", head)
+        hm = re.match(r"Insert (\w+)(?: (\S+))? \(([^)]+)\)", head)   # value is absent for buttons
         if not hm:
             raise ValueError(f"unparsed instruction line: {head!r}")
         ref, val, kind = hm.groups()
+        val = val or ""
         nm = re.search(r"notch facing (\w+)", head)
-        kind = {"inline-3": "transistor", "led": "LED", "electrolytic": "electrolytic capacitor",
-                "DIP-8": "chip (DIP-8), notch facing " + (nm.group(1) if nm else "left")}.get(kind, kind)
+        side = T["sides"].get(nm.group(1) if nm else "left", "left")
+        kind = T["kinds"].get(kind, kind).format(side=side)
+        if lang == "de" and kind == "LED":
+            val, kind = "", f"LED, {_LED_DE.get(val, val)}"
+        elif lang == "de" and kind == "Transistor":
+            val, kind = "", f"{val}-Transistor"
         pl = []
+        legs = []
+        for p in pins:
+            pm = re.match(r"\s*pin (\S+)(?: \((\w+)\))?\s+-> (\S+)\s+\[(\w+)\]", p)
+            if pm:
+                legs.append(pm.group(3))
+        tactile = (hm.group(3) == "button" and len(legs) == 2 and legs[0][0] == legs[1][0] and legs[0][0] in "ef")
+        if tactile:   # 6 x 6 mm button across the channel: four legs
+            o = "f" if legs[0][0] == "e" else "e"
+            allx = legs + [o + legs[0][1:], o + legs[1][1:]]
+            lab = "Beine" if lang == "de" else "legs"
+            items.append(f'<li><span class="ref">{ref}</span><span class="what">{kind}{" (6×6 mm, über den Mittelkanal)" if lang == "de" else " (6×6 mm, across the channel)"}</span>'
+                         f'<span class="holes"><span class="pin"><b>{lab}</b> {" ".join(f"<code>{x}</code>" for x in allx)}</span></span></li>')
+            continue
         for p in pins:
             pm = re.match(r"\s*pin (\S+)(?: \((\w+)\))?\s+-> (\S+)\s+\[(\w+)\]", p)
             if pm:
@@ -85,7 +126,7 @@ def steps_html(instructions):
 
 
 # ---------------------------------------------------------------- charts
-def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated trace", area=True, decimate=1500, ymin=0.0, bands=()):
+def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated trace", area=True, decimate=1500, ymin=0.0, bands=(), xlabel="time (s)"):
     """Line chart. series: list of (y_array, css_class); css_class '' (LED red), 't2', 't3' (2nd/3rd colour), 'blue', 'cu' (copper).
     ymin < 0 allows negative values (e.g. base voltages); areas are filled down to y = max(ymin, 0).
     bands: [(t0, t1, label)] shaded event windows (touches, button presses) drawn behind the traces."""
@@ -124,7 +165,7 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
     return (f'<svg viewBox="0 0 {W} {H}" class="chart" role="img" aria-label="{_html.escape(label)}">'
             + "".join(g) + "".join(paths)
             + f'<text x="{l}" y="{top-3}" class="axis">{yunit}</text>'
-            + f'<text x="{W-r}" y="{H-4}" text-anchor="end" class="axis">time (s)</text></svg>')
+            + f'<text x="{W-r}" y="{H-4}" text-anchor="end" class="axis">{_html.escape(xlabel)}</text></svg>')
 
 
 # ---------------------------------------------------------------- player data
@@ -168,6 +209,11 @@ _TRANSISTOR_NOTE = ("<b>Transistor pinout.</b> The layout assumes E-B-C pin orde
                     "their column numbers. If E is in the lower-numbered column (E left of C), the flat face points toward the bottom edge "
                     "of the board, toward you. If C is left of E, the flat face points toward the top edge. If your part is a BC547 or BC548 "
                     "(C-B-E order), turn every transistor 180° from what the drawing shows.")
+_TRANSISTOR_NOTE_DE = ("<b>Transistor-Anschlüsse.</b> Das Layout setzt die Reihenfolge E-B-C voraus, von links nach rechts gelesen mit der flachen Seite zu dir, "
+                       "wie beim 2N2222A, 2N3904, S8050 und S9013. Die Aufbauliste nennt die Beine immer in der Reihenfolge E, B, C; vergleiche die Spaltennummern. "
+                       "Liegt E links von C (kleinere Spalte), zeigt die flache Seite zur unteren Brettkante, also zu dir; liegt C links von E, zur oberen Kante. "
+                       "Bei BC547/BC548 (Reihenfolge C-B-E) jeden Transistor gegenüber der Zeichnung um 180° drehen.")
+_CAP_NOTE_DE = ("<b>Elko-Polung.</b> Das <code>+</code>-Bein ist das längere; der Streifen auf dem Gehäuse markiert <code>−</code>.")
 _CAP_NOTE = ("<b>Electrolytic polarity.</b> The <code>+</code> lead is the longer one; the stripe on the can marks <code>−</code>.")
 
 
@@ -186,33 +232,39 @@ def build_page(spec):
     or board_svg (raw bblayout svg text) + instructions; board_caption, charts [(title, svg, caption)],
     parts [(refs, value, note)] — value like '330', '2.2k' gets bands; prefix with '=' to print verbatim,
     instructions (Layout.instructions() text), supply_note, how (html), notes [html] (extra notes),
-    has_transistors / has_electrolytics (bool; default: detected from instructions), footer (html).
+    has_transistors / has_electrolytics (bool; default: detected from instructions), footer (html),
+    lang ("en" default, "de": German UI strings, build list and notes; write your own texts in that language).
     Player options live in player_data(): rate_led, show_rate.
     """
     if "layout" in spec:                       # derive board drawing, build list and supply note from the Layout
-        from board_tools import fix_instructions, mark_supply, supply_note
+        from board_tools import check_tactile, draw_tactile, fix_instructions, mark_supply, supply_note
         L = spec["layout"]
+        bad = check_tactile(L)
+        if bad:
+            raise ValueError("tactile button conflicts: " + "; ".join(bad))
         spec = dict(spec)
-        spec.setdefault("board_svg", mark_supply(L.svg(), L))
+        spec.setdefault("board_svg", draw_tactile(mark_supply(L.svg(), L), L))
         spec.setdefault("instructions", fix_instructions(L.instructions(), L))
-        spec.setdefault("supply_note", supply_note(L))
+        spec.setdefault("supply_note", supply_note(L, lang=spec.get("lang", "en")))
+    lang = spec.get("lang", "en")
+    T = STR[lang]
     css = open(os.path.join(TEMPLATES, "page.css")).read() + "\n" + spec.get("extra_css", "")
     js = open(os.path.join(TEMPLATES, "player.js")).read()
     e = _html.escape
     specs = "".join(f'<div class="spec"><span>{e(a)}</span><b>{e(b)}</b></div>' for a, b in spec["specs"])
-    pl = spec["player"]
+    pl = dict(spec["player"], labels={k: T[k] for k in ("play", "pause", "of", "now")})
     multi = len(pl["leds"]) > 1
     leds = "".join(f'<figure><div class="led {e(d.get("color", "red"))}"><div class="glow"></div></div><figcaption>{e(d["name"])}</figcaption></figure>'
                    for d in pl["leds"])
     cur = " · ".join(f'{e(d["name"])} <b class="cur">0.0</b> mA' for d in pl["leds"])
     player = f'''<figure class="panel player" data-key="main">
-    <div class="player-head"><h3>Live simulation</h3><button type="button" class="play" aria-pressed="false">Play</button></div>
+    <div class="player-head"><h3>{T["live"]}</h3><button type="button" class="play" aria-pressed="false">{T["play"]}</button></div>
     <div class="player-body{' multi' if multi else ''}">
       <div class="leds" aria-hidden="true">{leds}</div>
       <div class="scope-wrap"><canvas class="scope" aria-label="Scrolling LED current trace"></canvas></div>
     </div>
     <div class="readout">{'<span><b class="rate">–</b> Hz</span>' if pl.get("show_rate", True) else ''}<span>{cur}</span><span class="tpos">t = 0.0 s</span></div>
-    <figcaption>{spec.get("player_caption", "Real-time replay of the ngspice LED current; the trace shows the last 4 seconds.")}</figcaption>
+    <figcaption>{spec.get("player_caption", T["player_caption"])}</figcaption>
   </figure>'''
     charts = "".join(f'<figure class="panel"><h3>{e(t)}</h3>{svg}<figcaption>{cap}</figcaption></figure>' for t, svg, cap in spec["charts"])
     rows = []
@@ -225,8 +277,9 @@ def build_page(spec):
             v = e(val)
         rows.append(f"<tr><td>{e(refs)}</td><td class=\"n\">{v}</td><td>{note}</td></tr>")
     has_el = spec.get("has_electrolytics", "electrolytic" in spec["instructions"])
-    notes = ([_TRANSISTOR_NOTE] if spec.get("has_transistors", "inline-3" in spec["instructions"]) else []) \
-        + ([_CAP_NOTE] if has_el else []) + spec.get("notes", [])
+    tn, cn = (_TRANSISTOR_NOTE_DE, _CAP_NOTE_DE) if lang == "de" else (_TRANSISTOR_NOTE, _CAP_NOTE)
+    notes = ([tn] if spec.get("has_transistors", "inline-3" in spec["instructions"]) else []) \
+        + ([cn] if has_el else []) + spec.get("notes", [])
     notes_html = "".join(f'<div class="note">{n}</div>' for n in notes)
     data = json.dumps({"main": pl})
     return f'''<title>{e(spec["title"])}</title>
@@ -252,22 +305,22 @@ def build_page(spec):
   {charts}
   <div class="two">
     <div>
-      <h2>Parts</h2>
-      <table><tr><th>Ref</th><th>Value</th><th>Note</th></tr>{"".join(rows)}</table>
+      <h2>{T["parts"]}</h2>
+      <table><tr><th>{T["ref"]}</th><th>{T["value"]}</th><th>{T["note"]}</th></tr>{"".join(rows)}</table>
     </div>
     <div>
-      <h2>Build order</h2>
-      <ol class="steps">{steps_html(spec["instructions"])}</ol>
-      <p class="lede">{spec.get("supply_note", "Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail.")}</p>
+      <h2>{T["build"]}</h2>
+      <ol class="steps">{steps_html(spec["instructions"], lang)}</ol>
+      <p class="lede">{spec.get("supply_note", T["supply_rail"])}</p>
     </div>
   </div>
   <div class="notes">
-    <h2>How it works</h2>
+    <h2>{T["how"]}</h2>
     {spec["how"]}
   </div>
 </section>
-<section class="notes" aria-label="Before you power up">
-  <h2>Before you power up</h2>
+<section class="notes" aria-label="{T["before"]}">
+  <h2>{T["before"]}</h2>
   {notes_html}
 </section>
 <footer>{spec["footer"]}</footer>
