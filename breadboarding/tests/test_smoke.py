@@ -22,7 +22,7 @@ def test_ngspice_installed():
     assert "ngspice" in out
 
 
-@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and", "and2", "disco"])
+@pytest.mark.parametrize("key", ["blink", "breathe", "fm", "ps", "res", "n555", "s555", "alt", "chaser", "police", "ff", "beat", "mini_blink", "and", "and2", "disco", "pot"])
 def test_example_layouts_verify(key):
     from bblayout import Layout
     L = Layout.load(os.path.join(EXAMPLES, f"{key}_layout.json"))
@@ -225,3 +225,23 @@ def test_disco_colours(tmp_path, monkeypatch):
     s1, s2, s3 = (starts[k][0][0] for k in ("D1", "D2", "D3"))
     order = [k for _, k in sorted([(s1, "1"), (s2, "2"), (s3, "3")])]
     assert "".join(order) in ("123", "231", "312")
+
+
+def test_pot_speed_control(tmp_path, monkeypatch):
+    """params= sets the pot: wiper at pin 1 (5 V side) runs faster than the middle position."""
+    from sim_tools import as_built, flashes
+    monkeypatch.chdir(tmp_path)
+    path = os.path.join(EXAMPLES, "pot_layout.json")
+    per = {}
+    for pos in (0.0, 0.5):
+        t, I = as_built("pot", T="9", step="2m", layout_path=path, params={"POS_P1": pos})
+        s, _ = flashes(t, I["D1"], t0=4)
+        per[pos] = float(np.median(np.diff(s)))
+    assert per[0.0] < 0.8 * per[0.5] and abs(per[0.5] - 1.37) / 1.37 < 0.1, per
+
+
+def test_run_netlist_odd_names(tmp_path, monkeypatch):
+    from sim_tools import run_netlist
+    monkeypatch.chdir(tmp_path)
+    r = run_netlist("* x\nV1 a 0 1\nR1 a 0 1k\n.tran 1m 2m\n", ["v(a)"], name="w10k,4.7k 6.8k")
+    assert abs(float(r["v(a)"][-1]) - 1) < 1e-6

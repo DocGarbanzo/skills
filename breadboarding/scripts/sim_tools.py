@@ -48,7 +48,7 @@ def _check_complete(t, T, name):
         raise SimError(f"{name}: transient stopped at t = {t[-1]:.4g} s of {T}; check model warnings in the log")
 
 
-def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, presses=None, parasitic_L="auto"):
+def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, presses=None, params=None, parasitic_L="auto"):
     """Simulate the as-placed board (breadboard parasitics included).
 
     Every LED (or only those listed in `leds`, e.g. ["D1","D2"]) gets a 0 V sense source.
@@ -61,6 +61,8 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     "auto" (default): False for boards with an NE555, otherwise True with one retry without them when
     ngspice reports "timestep too small". nH inductors next to the 1 mV-sharp behavioural NE555 switches make
     the transient stiff (failures, or > 10 min for 8 s at 10 us); at LED time scales they do nothing.
+    `params` = {"POS_P1": 0.25, ...} overrides bblayout .param lines (potentiometer wiper position 0..1
+    measured from pin 1, etc.).
     `presses` = {"S1": [(t_on, t_off), ...]} replaces each button's fixed resistor by a switch closed in
     those windows (0.05 Ω closed, 1 GΩ open); buttons not listed stay open.
     `timeout` (s) bounds the ngspice run; long runs at fine steps take minutes, so keep T to a few slow cycles.
@@ -86,6 +88,10 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
             raise SimError(f"button {ref} not found in the netlist")
     if presses:
         s = re.sub(r"^(\.tran )", ".model BTN_SW SW(vt=0.5 vh=0.1 ron=0.05 roff=1e9)\n\\1", s, count=1, flags=re.M)
+    for k, v in (params or {}).items():
+        s, n = re.subn(rf"^\.param {k}=\S+", f".param {k}={v}", s, flags=re.M)
+        if n != 1:
+            raise SimError(f"parameter {k} not found in the netlist")
     npn, led_models = _models(models_path)
     if beta is not None:
         npn = re.sub(r"Bf=[0-9.eE+-]+", f"Bf={beta}", npn)
@@ -135,6 +141,7 @@ def run_netlist(netlist, vectors, name="design", timeout=600):
     Use "{models}" in the text for the path of models/models.inc. Write 1Meg, never 1M (SPICE M = milli).
     Use a unique `name` per parallel run.
     """
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", name)   # ngspice splits wrdata arguments at commas etc.
     text = netlist.replace("{models}", os.path.join(MODELS, "models.inc")).replace("{ne555}", os.path.join(MODELS, "ne555.lib"))
     if re.search(r"\b\d+(\.\d+)?M\b(?!eg)", re.sub(r"^\*.*$", "", text, flags=re.M)):
         raise SimError("netlist contains a value like '1M' (= 1 milliohm in SPICE); write 1Meg")

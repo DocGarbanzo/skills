@@ -58,9 +58,15 @@ def supply_points(layout):
 def supply_note(layout, lang="en"):
     p = supply_points(layout)
     if layout.board.rails:
+        rn = layout.rail_nets
+        vrail = next((r for r in ("T+", "B+", "T-", "B-") if rn.get(r) == "VCC"), "T+")
+        grail = next((r for r in ("T-", "B-", "T+", "B+") if rn.get(r) == "GND"), "T-")
+        de = {"T": "obere", "B": "untere"}; en = {"T": "top", "B": "bottom"}
         if lang == "de":
-            return "Versorgung zuletzt anschließen: +5 V an die obere <code>+</code>-Schiene, Masse an die obere <code>−</code>-Schiene."
-        return "Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail."
+            return (f"Versorgung zuletzt anschließen: +5 V an die {de[vrail[0]]} <code>{vrail[1]}</code>-Schiene, "
+                    f"Masse an die {de[grail[0]]} <code>{'−' if grail[1] == '-' else '+'}</code>-Schiene.")
+        return (f"Connect the supply last: +5 V to the {en[vrail[0]]} <code>{vrail[1]}</code> rail, "
+                f"ground to the {en[grail[0]]} <code>{'−' if grail[1] == '-' else '+'}</code> rail.")
     if lang == "de":
         return (f"Versorgung zuletzt anschließen: +5-V-Leitung in <code>{p['VCC']}</code>, Masse in <code>{p['GND']}</code> "
                 "(in der Zeichnung markiert). Dieses Brett hat keine Versorgungsschienen; nur diese beiden Löcher führen Spannung.")

@@ -57,7 +57,7 @@ STR = {
                jumper="{col} jumper, about {ln}\"", player_caption="Real-time replay of the ngspice LED current; the trace shows the last 4 seconds.",
                supply_rail="Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail.",
                kinds={"inline-3": "transistor", "led": "LED", "electrolytic": "electrolytic capacitor", "resistor": "resistor",
-                      "capacitor": "capacitor", "button": "push button", "DIP-8": "chip (DIP-8), notch facing {side}"},
+                      "capacitor": "capacitor", "button": "push button", "pot": "potentiometer", "DIP-8": "chip (DIP-8), notch facing {side}"},
                colors={}, sides={"left": "left", "right": "right"}),
     "de": dict(parts="Bauteile", build="Aufbau Schritt für Schritt", how="So funktioniert es", before="Vor dem Einschalten",
                live="Live-Simulation", play="Start", pause="Pause", of="von", now="jetzt", ref="Bez.", value="Wert", note="Hinweis",
@@ -65,7 +65,7 @@ STR = {
                player_caption="Echtzeit-Wiedergabe des simulierten LED-Stroms (ngspice); die Kurve zeigt die letzten 4 Sekunden.",
                supply_rail="Versorgung zuletzt anschließen: +5 V an die obere <code>+</code>-Schiene, Masse an die obere <code>−</code>-Schiene.",
                kinds={"inline-3": "Transistor", "led": "LED", "electrolytic": "Elko", "resistor": "Widerstand",
-                      "capacitor": "Kondensator", "button": "Taster", "DIP-8": "Chip (DIP-8), Kerbe nach {side}"},
+                      "capacitor": "Kondensator", "button": "Taster", "pot": "Potentiometer", "DIP-8": "Chip (DIP-8), Kerbe nach {side}"},
                colors={"red": "Rote", "black": "Schwarze", "yellow": "Gelbe", "green": "Grüne", "blue": "Blaue", "orange": "Orange", "white": "Weiße"},
                sides={"left": "links", "right": "rechts"}),
 }
@@ -96,6 +96,8 @@ def steps_html(instructions, lang="en"):
         val = val or ""
         nm = re.search(r"notch facing (\w+)", head)
         side = T["sides"].get(nm.group(1) if nm else "left", "left")
+        if kind == "inline-3" and re.match(r"(P|RV|VR)\d", ref):      # pots share the inline-3 footprint with transistors
+            kind = "pot"
         kind = T["kinds"].get(kind, kind).format(side=side)
         if lang == "de" and kind == "LED":
             val, kind = "", f"LED, {_LED_DE.get(val, val)}"

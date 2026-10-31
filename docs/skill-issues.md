@@ -93,3 +93,15 @@ Problems the `breadboarding` skill hit while in use, and their status.
 |---|---|---|
 | 51 | No yellow or white LED models; no chart colours for them (white on white is invisible). | Fixed: `LEDYELLOW`, `LEDWHITE`; chart/key classes `yellow`, `white` (drawn grey). |
 | 52 | Chaser timing with mixed LED colours was undocumented: each stage's time depends on the previous LED's forward voltage. | Documented in section 5 with per-stage R_B values. |
+
+## 2026-10-31: Disco-Lauflicht mit Poti
+
+| # | Problem | Status |
+|---|---|---|
+| 53 | `run_netlist()` names with commas/spaces broke ngspice's `wrdata` silently ("no such vector"). | Fixed: names are sanitised. |
+| 54 | No way to set a potentiometer position in as-built runs. | Fixed: `as_built(params={"POS_P1": x})` overrides `.param` lines. |
+| 55 | bblayout's `potentiometer()` uses 0.1" pitch; rotary pots are 0.2". | Documented: `Component(..., Inline(..., pitch=2), kind="potentiometer")`. |
+| 56 | The build list called a pot a "transistor" (both use the inline-3 footprint). | Fixed: refs P#/RV#/VR# are named potentiometer / Potentiometer. |
+| 57 | `supply_note()` always said "top + rail", even when +5 V is on the bottom rail. | Fixed: derived from `rail_nets`. |
+| 58 | `print_check.py` left stale page PNGs from a longer earlier run. | Fixed: old page images are removed first. |
+| 59 | Pot speed control: wiper loading and the saturation limit at the slow end were undocumented. | Documented in section 5 (emitter-follower buffer, resistor under the pot, β requirement). |

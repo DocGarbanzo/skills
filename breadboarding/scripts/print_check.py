@@ -30,6 +30,9 @@ async def _pdf(html_path, pdf_path):
 
 def main(html_path, outdir="print_check"):
     os.makedirs(outdir, exist_ok=True)
+    for f in os.listdir(outdir):                       # stale page PNGs from an earlier, longer run would mislead
+        if f.startswith("page-") and f.endswith(".png"):
+            os.remove(os.path.join(outdir, f))
     pdf = os.path.join(outdir, "print.pdf")
     errors = asyncio.run(_pdf(html_path, pdf))
     info = subprocess.run(["pdfinfo", pdf], capture_output=True, text=True).stdout
