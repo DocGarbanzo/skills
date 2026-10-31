@@ -105,3 +105,9 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | 57 | `supply_note()` always said "top + rail", even when +5 V is on the bottom rail. | Fixed: derived from `rail_nets`. |
 | 58 | `print_check.py` left stale page PNGs from a longer earlier run. | Fixed: old page images are removed first. |
 | 59 | Pot speed control: wiper loading and the saturation limit at the slow end were undocumented. | Documented in section 5 (emitter-follower buffer, resistor under the pot, β requirement). |
+
+## 2026-10-31: wide speed range (Darlington ring)
+
+| # | Problem | Status |
+|---|---|---|
+| 60 | The first pot design only spanned 2.4×; the reason (base drive vs. collector current near the threshold) was not in the skill. | Documented with the Darlington solution and the R_C·C limit for large capacitors. |
