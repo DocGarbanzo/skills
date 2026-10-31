@@ -16,7 +16,7 @@ User context (adjust if told otherwise): half breadboard (400 points, 30 columns
 - `scripts/sim_tools.py`: `as_built(key, T, step, beta=None, leds=None, extra=())` exports a saved layout to SPICE, swaps in the real models, adds a sense source to every LED and runs ngspice. It returns `(t, I)` for one LED or `(t, {"D1": I1, "D2": I2, "v(node)": ...})` for several LEDs or extra node voltages, and raises `SimError` when ngspice fails. `extra_netlist=` injects stimuli the board cannot show (a finger, a button: see section 7), `timeout=` bounds the run; `parasitic_L="auto"` drops the nH strip inductors on NE555 boards (they make the sharp 555 model crawl or fail with "timestep too small") and retries once without them elsewhere; only the written vectors are saved (saving all nodes OOM-killed parallel runs). `run_netlist(text, vectors)` runs a hand-written design netlist and returns named vectors (no `wrdata` column bookkeeping; refuses `1M`). `edges()` and `flashes()` do hysteretic onset detection with glitch filtering; `flash_groups()` groups flashes of several LEDs into bursts.
 - `scripts/board_tools.py`: `render_board(layout)` — the board SVG for pages: readable part labels (`tidy_labels`: opaque plates, moved off other labels, part bodies and column numbers, drawn last), tactile buttons (`draw_tactile`), supply-lead markers (`mark_supply`). Also `supply_points()`, `supply_note()`, `fix_instructions()`, `check_tactile()`. Use `render_board` also for PNG checks; bblayout's raw `svg()` puts labels on hole rows where they are hard to read.
 - `scripts/make_page.py`: builds the artifact page from a spec dict: `build_page()`, `chart_svg()` (`ymin` for negative values, `bands=` for event windows, classes `''`/`t2`/`t3`), `player_data()` (any number of LEDs; 1 ms bin averages; `rate_led=k`, `show_rate=False`, `colors={"D2": "blue"}`, `smooth_s=0.03` eye-averaging for carriers ≳ 50 Hz), spec key `extra_css` for per-page print tweaks, `steps_html()`, `bands()`. Styles and print rules are in `templates/page.css`, the player in `templates/player.js`.
-- `examples/*_layout.json`: eighteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
+- `examples/*_layout.json`: nineteen proven, verified layouts (see section 9). Load them with `Layout.load()`, render with `.svg()`, or simulate with `as_built()`.
 
 ## 1. Setup (about 1 minute, once per session)
 
@@ -24,7 +24,7 @@ If the skills repo is checked out (it has `pyproject.toml` and `uv.lock` at its 
 
 ```bash
 sudo apt-get install -y ngspice libcairo2     # macOS: brew install ngspice cairo
-uv sync && uv run pytest -q                   # env + smoke tests (38 should pass)
+uv sync && uv run pytest -q                   # env + smoke tests (39 should pass)
 ```
 
 Then run all Python with `uv run python ...`. Work in a separate directory (not inside the repo) and point uv at the repo: `uv run --project <repo> python design.py`. Import the skill scripts with `sys.path.insert(0, "<repo>/breadboarding/scripts")`. Without the repo (e.g. in a cloud sandbox):
@@ -121,6 +121,13 @@ Variant when the bottom row g is needed for a follow-on stage (see `examples/bre
 - No inputs float: a transistor base driven only through a button gets a pull-down (100k base→GND).
 - **Exclusive pair without a transistor:** two LEDs back to back between node X (fed from button 1 through R1, pulled down by 330 Ω) and node B (button 2, pulled down by 330 Ω): one lights for button 1 only, the other for button 2 only, neither when both are pressed (X ≈ B). B then rises to ≈ 1.7 V in the button-1 case, so any transistor driven from B needs a stiff base divider (4.7k/1k) to stay off (`examples/and2_layout.json`).
 - **AND with one NPN:** feed an LED from node A (button 1) through a resistor and return its cathode through an NPN whose base is driven from node B (button 2). It conducts only when A supplies current and B opens the transistor (`examples/and_layout.json`).
+
+## 3d. Buzzers
+
+- Use the **active** buzzer for "beep while pressed": it has its own oscillator and beeps on DC (≈ 2.3 kHz, ≈ 25–30 mA at 5 V). A passive buzzer only clicks on DC and needs an AC drive (e.g. a 555) — use it for tones/melodies. Tell them apart: active = sealed black bottom, beeps on 5 V; passive = green PCB visible, clicks, ≈ 16 Ω.
+- Place it with `two_lead("BZ1", "buzzer", plus_net, minus_net, value)`; a 12 mm body covers ≈ 5 × 5 holes, so straddle the channel (`{"+": "e14", "-": "f14"}`) and keep the strips around free. `render_board()` draws the round body with "+" (`draw_buzzers`).
+- bblayout exports a buzzer as 42 Ω; `as_built()` replaces it with `buzzer_ohms=180` (≈ 28 mA). `player_data(..., beep_led=k)` makes the live player beep while channel k is on (after the viewer presses play).
+- Simplest morse key: +5 V → button → active buzzer → GND, optional LED + 330 Ω in parallel (`examples/morse_layout.json`).
 
 ## 4. bblayout API essentials
 
@@ -299,6 +306,7 @@ An earlier, softer version stalled in half-switched states when thresholds moved
 | Disco-Lauflicht (red, yellow, white) | `disco_layout.json` | 3 NPN | chaser board; R_C 470, R_B 10k (after white) / 15k / 15k, C 100 µF | 0.49 / 0.47 / 0.49 s per LED, 1.52 s cycle; 6.9 / 6.5 / 4.3 mA |
 | Disco-Lauflicht mit Poti | `pot_layout.json` | 4 NPN | disco ring with R_B 5.6k/8.2k/8.2k on N (top + rail); Q4 follower from a 10k pot with 10k below; LEDs top, R_C bottom, +5 V into B+ | 0.97 / 1.37 / 2.35 s per cycle |
 | Disco-Lauflicht, großer Regelbereich | `wide_layout.json` | 6 NPN (3 Darlingtons) | R_B 68k/100k/100k on N = pot wiper (top + rail), C 10 µF, R_C 470, 4.7k under the pot | 0.78 / 1.43 / 5.1 s per cycle |
+| Morse-Piepser | `morse_layout.json` | none | button → active buzzer (180 Ω model) ∥ LED + 330 Ω | 28 mA buzzer, 10 mA LED while pressed, 0 mA idle |
 | 555 strobe sweep | `s555_layout.json` | 2 × 555 + 1 NPN | slow 10k/220k/100 µF → 4.7k + 1000 µF → 39k → saturating CE, 100 Ω series, 1k pull-up into fast pin 5; fast 180k/12k/2.2 µF, LED sink mode 220 Ω + 1k bleed, 2 × 100 µF decoupling | 1.2 → 20 Hz, 18 ms flashes, ~30 s cycle |
 
 Reuse these as starting points; re-simulate whenever values change.

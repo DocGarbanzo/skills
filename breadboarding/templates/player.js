@@ -19,9 +19,19 @@
       canvas:el.querySelector('canvas'), glows:[...el.querySelectorAll('.glow')],
       rate:el.querySelector('.rate'), curs:[...el.querySelectorAll('.cur')], tpos:el.querySelector('.tpos'),
       btn:el.querySelector('.play')};
-    p.btn.addEventListener('click',()=>{ p.playing=!p.playing; sync(p); if(p.playing) kick(); });
+    p.btn.addEventListener('click',()=>{ p.playing=!p.playing; sync(p); if(d.beep_led!=null) beepInit(p,d); if(p.playing) kick(); });
     players.push(p); draw(p);
   });
+  function beepInit(p,d){
+    // buzzer circuits: a Web Audio tone follows one channel; needs a user gesture (the play button)
+    try{
+      if(!p.ac){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+        p.ac=new AC(); p.osc=p.ac.createOscillator(); p.gain=p.ac.createGain();
+        p.osc.type='square'; p.osc.frequency.value=d.beep_hz||2300; p.gain.gain.value=0;
+        p.osc.connect(p.gain); p.gain.connect(p.ac.destination); p.osc.start(); p.beepK=d.beep_led; }
+      if(p.ac.state==='suspended') p.ac.resume();
+    }catch(e){}
+  }
   function sync(p){ const L=p.labels; p.btn.textContent=p.playing?L.pause:L.play; p.btn.setAttribute('aria-pressed',p.playing); }
   function sample(p,k,t){ const i=Math.floor(((t%p.T)+p.T)%p.T/p.dt); return p.qs[k][i]/255; }
   function avg(p,k,t){ // mean over the last p.sm samples, wrapping around the loop
@@ -61,6 +71,7 @@
       }
       g.stroke();
     });
+    if(p.gain){ const on=p.playing && sample(p,p.beepK,p.t)>0.5; p.gain.gain.setTargetAtTime(on?0.08:0, p.ac.currentTime, 0.004); }
     p.qs.forEach((q,k)=>{ const v=avg(p,k,p.t);
       if(p.glows[k]) p.glows[k].style.opacity=Math.pow(v,0.6).toFixed(3);
       if(p.curs[k]) p.curs[k].textContent=(v*p.imax).toFixed(1); });

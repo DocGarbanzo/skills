@@ -57,7 +57,7 @@ STR = {
                jumper="{col} jumper, about {ln}\"", player_caption="Real-time replay of the ngspice LED current; the trace shows the last 4 seconds.",
                supply_rail="Connect the supply last: +5 V to the top <code>+</code> rail, ground to the top <code>−</code> rail.",
                kinds={"inline-3": "transistor", "led": "LED", "electrolytic": "electrolytic capacitor", "resistor": "resistor",
-                      "capacitor": "capacitor", "button": "push button", "pot": "potentiometer", "DIP-8": "chip (DIP-8), notch facing {side}"},
+                      "capacitor": "capacitor", "button": "push button", "pot": "potentiometer", "buzzer": "buzzer", "DIP-8": "chip (DIP-8), notch facing {side}"},
                colors={}, sides={"left": "left", "right": "right"}),
     "de": dict(parts="Bauteile", build="Aufbau Schritt für Schritt", how="So funktioniert es", before="Vor dem Einschalten",
                live="Live-Simulation", play="Start", pause="Pause", of="von", now="jetzt", ref="Bez.", value="Wert", note="Hinweis",
@@ -65,7 +65,7 @@ STR = {
                player_caption="Echtzeit-Wiedergabe des simulierten LED-Stroms (ngspice); die Kurve zeigt die letzten 4 Sekunden.",
                supply_rail="Versorgung zuletzt anschließen: +5 V an die obere <code>+</code>-Schiene, Masse an die obere <code>−</code>-Schiene.",
                kinds={"inline-3": "Transistor", "led": "LED", "electrolytic": "Elko", "resistor": "Widerstand",
-                      "capacitor": "Kondensator", "button": "Taster", "pot": "Potentiometer", "DIP-8": "Chip (DIP-8), Kerbe nach {side}"},
+                      "capacitor": "Kondensator", "button": "Taster", "pot": "Potentiometer", "buzzer": "Buzzer", "DIP-8": "Chip (DIP-8), Kerbe nach {side}"},
                colors={"red": "Rote", "black": "Schwarze", "yellow": "Gelbe", "green": "Grüne", "blue": "Blaue", "orange": "Orange", "white": "Weiße"},
                sides={"left": "links", "right": "rechts"}),
 }
@@ -171,7 +171,7 @@ def chart_svg(t, series, ymax, yticks, xmax, xstep, yunit="mA", label="Simulated
 
 
 # ---------------------------------------------------------------- player data
-def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, colors=None, smooth_s=0.0):
+def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, colors=None, beep_led=None, beep_hz=2300, smooth_s=0.0):
     """Bin-average LED currents (dict name -> A) into dt bins on [t0, t1), quantise to uint8 with a shared full scale.
     Bin averages (not point samples) keep the light energy right for pulses shorter than dt (no aliasing).
     smooth_s > 0: glow, readout and scope show the moving average over that window (eye integration); use
@@ -179,6 +179,8 @@ def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, col
     the largest averaged value (scope_max_mA), so the averaged curves use the full height.
     The Hz readout counts onsets of any LED; pass rate_led=k to count only LED k (e.g. a chaser's cycle rate).
     show_rate=False hides the Hz readout (latches, one-shots).
+    beep_led=k plays a beep_hz tone (Web Audio) while LED/channel k is on — for buzzer circuits; browsers allow
+    sound only after the viewer presses the play button.
     colors: {name: "red"|"blue"|"green"|"yellow"|"white"} sets each LED's glow and scope-trace colour (default red)."""
     t = np.asarray(t)
     tg = np.arange(t0, t1 + dt / 2, dt)
@@ -202,6 +204,8 @@ def player_data(t, currents, t0, t1, dt=1e-3, rate_led=None, show_rate=True, col
     if rate_led is not None:
         out["rate_led"] = int(rate_led)
     out["show_rate"] = bool(show_rate)
+    if beep_led is not None:
+        out["beep_led"], out["beep_hz"] = int(beep_led), float(beep_hz)
     return out
 
 

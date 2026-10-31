@@ -1,0 +1,160 @@
+{
+  "board": {
+    "name": "half",
+    "columns": 30,
+    "rails": true,
+    "rail_start": 2,
+    "rail_groups": 5,
+    "rail_group_size": 5,
+    "split_rails": false
+  },
+  "rail_nets": {
+    "T+": "VCC",
+    "T-": "GND",
+    "B+": "VCC",
+    "B-": "GND"
+  },
+  "placements": [
+    {
+      "ref": "S1",
+      "pins": {
+        "1": "e4",
+        "2": "e6"
+      },
+      "blocked": [
+        "e5"
+      ]
+    },
+    {
+      "ref": "BZ1",
+      "pins": {
+        "+": "e14",
+        "-": "f14"
+      }
+    },
+    {
+      "ref": "R1",
+      "pins": {
+        "1": "b6",
+        "2": "b9"
+      },
+      "blocked": [
+        "b7",
+        "b8"
+      ]
+    },
+    {
+      "ref": "D1",
+      "pins": {
+        "A": "a9",
+        "K": "T-9"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "a4",
+      "to": "T+4",
+      "net": "VCC",
+      "color": "red"
+    },
+    {
+      "from": "c6",
+      "to": "c14",
+      "net": "A",
+      "color": "orange"
+    },
+    {
+      "from": "j14",
+      "to": "B-14",
+      "net": "GND",
+      "color": "black"
+    },
+    {
+      "from": "T-29",
+      "to": "B-29",
+      "net": "GND",
+      "color": "black"
+    }
+  ],
+  "schematic": {
+    "name": "Morse-Piepser",
+    "components": [
+      {
+        "ref": "S1",
+        "kind": "button",
+        "pins": {
+          "1": "VCC",
+          "2": "A"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 2.0,
+          "max_span": 4.0,
+          "preferred_span": 2.0
+        }
+      },
+      {
+        "ref": "BZ1",
+        "kind": "buzzer",
+        "pins": {
+          "+": "A",
+          "-": "GND"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "+",
+            "-"
+          ],
+          "min_span": 2.0,
+          "max_span": 5.0,
+          "preferred_span": 3.0
+        },
+        "value": "aktiv"
+      },
+      {
+        "ref": "R1",
+        "kind": "resistor",
+        "pins": {
+          "1": "A",
+          "2": "LA"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "1",
+            "2"
+          ],
+          "min_span": 3.0,
+          "max_span": 8.0,
+          "preferred_span": 4.0
+        },
+        "value": "330"
+      },
+      {
+        "ref": "D1",
+        "kind": "led",
+        "pins": {
+          "A": "LA",
+          "K": "GND"
+        },
+        "footprint": {
+          "type": "two_lead",
+          "pins": [
+            "A",
+            "K"
+          ],
+          "min_span": 1.0,
+          "max_span": 3.0,
+          "preferred_span": 1.0
+        },
+        "value": "red"
+      }
+    ]
+  }
+}

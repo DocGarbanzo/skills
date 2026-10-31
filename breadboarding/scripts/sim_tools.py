@@ -48,7 +48,7 @@ def _check_complete(t, T, name):
         raise SimError(f"{name}: transient stopped at t = {t[-1]:.4g} s of {T}; check model warnings in the log")
 
 
-def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, presses=None, params=None, parasitic_L="auto"):
+def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=None, extra=(), extra_netlist="", timeout=600, presses=None, params=None, buzzer_ohms=180, parasitic_L="auto"):
     """Simulate the as-placed board (breadboard parasitics included).
 
     Every LED (or only those listed in `leds`, e.g. ["D1","D2"]) gets a 0 V sense source.
@@ -61,6 +61,8 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
     "auto" (default): False for boards with an NE555, otherwise True with one retry without them when
     ngspice reports "timestep too small". nH inductors next to the 1 mV-sharp behavioural NE555 switches make
     the transient stiff (failures, or > 10 min for 8 s at 10 us); at LED time scales they do nothing.
+    `buzzer_ohms`: bblayout models a buzzer as a 42 Ω resistor; an active 5 V buzzer draws ≈ 25–30 mA, so
+    it is replaced by this value (180 Ω).
     `params` = {"POS_P1": 0.25, ...} overrides bblayout .param lines (potentiometer wiper position 0..1
     measured from pin 1, etc.).
     `presses` = {"S1": [(t_on, t_off), ...]} replaces each button's fixed resistor by a switch closed in
@@ -92,6 +94,7 @@ def as_built(key, T, step, layout_path=None, beta=None, leds=None, models_path=N
         s, n = re.subn(rf"^\.param {k}=\S+", f".param {k}={v}", s, flags=re.M)
         if n != 1:
             raise SimError(f"parameter {k} not found in the netlist")
+    s = re.sub(r"^(R\S+ \S+ \S+) \S+(\s*;.*resistive approximation.*)$", rf"\1 {buzzer_ohms}\2", s, flags=re.M)
     npn, led_models = _models(models_path)
     if beta is not None:
         npn = re.sub(r"Bf=[0-9.eE+-]+", f"Bf={beta}", npn)

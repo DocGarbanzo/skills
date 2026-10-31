@@ -175,7 +175,7 @@ def draw_tactile(svg, layout, scale=14.0):
     for ref, c1, c2, row, other in tac:
         # drop bblayout's own small button symbol (square + dot + label) for this ref
         # (its lead line just before the group, then the group with square, dot and label)
-        svg = re.sub(r'(<line [^>]*stroke="#a9a9a9"[^>]*/>\n)?<g><title>' + re.escape(ref) + r'</title>(?:(?!<g>).)*?fill="#444"/>(?:(?!<g>).)*?</g>\n?',
+        svg = re.sub(r'(<line [^>]*stroke="#a9a9a9"[^>]*/>\n)?<g><title>' + re.escape(ref) + r'(?: [^<]*)?</title>(?:(?!<g>).)*?fill="#444"/>(?:(?!<g>).)*?</g>\n?',
                      "", svg, count=1, flags=re.S)
         xa, xb = X(c1), X(c2)
         ye, yf = Y(_ROW_Y["e"]), Y(_ROW_Y["f"])
@@ -256,4 +256,33 @@ def tidy_labels(svg, scale=14.0):
 
 def render_board(layout):
     """Board SVG for pages: readable labels, tactile buttons, supply-lead markers (rail-less boards)."""
-    return tidy_labels(mark_supply(draw_tactile(layout.svg(), layout), layout))   # tactile first: it removes bblayout's button symbol and label
+    return tidy_labels(mark_supply(draw_buzzers(draw_tactile(layout.svg(), layout), layout), layout))   # tactile first: it removes bblayout's button symbol and label
+
+
+# ---------------------------------------------------------------- buzzers (12 mm round body)
+def draw_buzzers(svg, layout, scale=14.0):
+    """Redraw buzzers as a 12 mm round body (bblayout draws them like a resistor). Mark + and keep the legs visible."""
+    s = scale
+    rails = layout.board.rails
+    x0, y0 = 1 - 2.0, (-6.0 if rails else -2.5)
+    pad_top = 2.0 if layout.schematic.name else 0.0
+    X = lambda x: round((x - x0) * s, 2)
+    Y = lambda y: round((y - y0 + pad_top) * s, 2)
+    g = []
+    for ref, pl in layout.placements.items():
+        comp = layout.schematic.components.get(ref)
+        if comp is None or comp.kind != "buzzer":
+            continue
+        # bblayout titles the group "<ref> <value>"; remove it with its lead line
+        svg = re.sub(r'(<line [^>]*/>\n)?<g><title>' + re.escape(ref) + r'(?: [^<]*)?</title>(?:(?!<g>).)*?</g>\n?', "", svg, count=1, flags=re.S)
+        hp, hm = pl.pins.get("+"), pl.pins.get("-")
+        (xa, ya), (xb, yb) = (X(hp.col), Y(_ROW_Y[hp.row])), (X(hm.col), Y(_ROW_Y[hm.row]))
+        cx, cy, r = (xa + xb) / 2, (ya + yb) / 2, s * 2.36            # 12 mm diameter = 4.7 hole pitches
+        parts = [f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="#1d1d1d" fill-opacity="0.88" stroke="#000"/>',
+                 f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{s*0.35:.1f}" fill="#555"/>']
+        for (x, y) in ((xa, ya), (xb, yb)):
+            parts.append(f'<rect x="{x - s*0.2:.1f}" y="{y - s*0.2:.1f}" width="{s*0.4:.1f}" height="{s*0.4:.1f}" fill="#c9c9c9" stroke="#777" stroke-width="0.8"/>')
+        parts.append(f'<text x="{xa + s*0.45:.1f}" y="{ya + s*0.2:.1f}" font-size="{s*0.75:.1f}" fill="#fff" font-weight="700">+</text>')
+        parts.append(f'<text x="{cx + r + s*0.3:.1f}" y="{cy + s*0.2:.1f}" font-size="{s*0.6:.1f}" fill="#222">{ref}</text>')
+        g.append('<g class="buzzer">' + "".join(parts) + '</g>')
+    return svg.replace("</svg>", "".join(g) + "</svg>") if g else svg

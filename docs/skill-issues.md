@@ -111,3 +111,11 @@ Problems the `breadboarding` skill hit while in use, and their status.
 | # | Problem | Status |
 |---|---|---|
 | 60 | The first pot design only spanned 2.4×; the reason (base drive vs. collector current near the threshold) was not in the skill. | Documented with the Darlington solution and the R_C·C limit for large capacitors. |
+
+## 2026-10-31: Morse-Piepser (active buzzer)
+
+| # | Problem | Status |
+|---|---|---|
+| 61 | Buzzers were drawn like resistors and simulated as 42 Ω (≈ 120 mA). | Fixed: `draw_buzzers()` (12 mm body, "+"), `as_built(buzzer_ohms=180)`. |
+| 62 | Symbol-removal regexes missed bblayout groups titled "ref value" (e.g. "BZ1 aktiv"). | Fixed for buttons and buzzers. |
+| 63 | The player could not make sound for buzzer circuits. | Fixed: `player_data(beep_led=k)` (Web Audio, after a click). |
